@@ -1,4 +1,4 @@
-# Atelier Oak - Full-Stack Premium eCommerce
+# Woodmart.lk - Full-Stack Premium eCommerce
 
 Production-oriented eCommerce application with a React frontend and Node.js/Express/MongoDB backend, including JWT auth, cart/wishlist sync, checkout flow, Stripe payment integration, order history, and a full admin dashboard.
 
