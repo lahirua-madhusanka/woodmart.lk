@@ -1,0 +1,161 @@
+import { useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
+function AuthPage() {
+  const { isAuthenticated, loading, login, register } = useAuth();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [mode, setMode] = useState("login");
+  const [form, setForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  const redirectTarget = useMemo(
+    () => location.state?.from || "/",
+    [location.state]
+  );
+
+  useEffect(() => {
+    if (!loading && isAuthenticated) {
+      navigate(redirectTarget, { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate, redirectTarget]);
+
+  const onChange = (field) => (event) => {
+    setForm((prev) => ({ ...prev, [field]: event.target.value }));
+  };
+
+  const onSubmit = async (event) => {
+    event.preventDefault();
+    if (submitting) return;
+
+    if (mode === "register" && form.password !== form.confirmPassword) {
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      if (mode === "register") {
+        await register({ name: form.name, email: form.email, password: form.password });
+      } else {
+        await login({ email: form.email, password: form.password });
+      }
+      navigate(redirectTarget, { replace: true });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <section className="container-pad py-10">
+      <div className="mx-auto grid max-w-5xl gap-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-premium md:grid-cols-2 md:p-8">
+        <aside className="rounded-2xl bg-gradient-to-br from-brand-dark via-brand to-[#0d75cc] p-7 text-white">
+          <p className="text-xs font-semibold uppercase tracking-wider text-brand-light">Welcome to Woodmart.lk</p>
+          <h1 className="mt-2 font-display text-4xl font-bold">{mode === "login" ? "Welcome back" : "Create your account"}</h1>
+          <p className="mt-3 text-sm text-brand-light">
+            Save favorites, track orders, and enjoy a seamless premium shopping experience.
+          </p>
+          <ul className="mt-6 space-y-2 text-sm text-brand-light">
+            <li>Exclusive member offers</li>
+            <li>Faster checkout experience</li>
+            <li>Personalized product recommendations</li>
+          </ul>
+        </aside>
+
+        <div className="p-2 md:p-4">
+          <div className="mb-5 inline-flex rounded-lg bg-slate-100 p-1 text-sm">
+            <button
+              onClick={() => setMode("login")}
+              className={`rounded-md px-4 py-2 font-semibold ${
+                mode === "login" ? "bg-white text-brand shadow" : "text-muted"
+              }`}
+            >
+              Login
+            </button>
+            <button
+              onClick={() => setMode("register")}
+              className={`rounded-md px-4 py-2 font-semibold ${
+                mode === "register" ? "bg-white text-brand shadow" : "text-muted"
+              }`}
+            >
+              Register
+            </button>
+          </div>
+
+          <form className="space-y-4" onSubmit={onSubmit}>
+            {mode === "register" && (
+              <label className="block text-sm">
+                <span className="mb-1 block font-semibold">Full Name</span>
+                <input
+                  value={form.name}
+                  onChange={onChange("name")}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none"
+                />
+              </label>
+            )}
+
+            <label className="block text-sm">
+              <span className="mb-1 block font-semibold">Email Address</span>
+              <input
+                type="email"
+                value={form.email}
+                onChange={onChange("email")}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none"
+              />
+            </label>
+
+            <label className="block text-sm">
+              <span className="mb-1 block font-semibold">Password</span>
+              <input
+                type="password"
+                value={form.password}
+                onChange={onChange("password")}
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none"
+              />
+            </label>
+
+            {mode === "register" && (
+              <label className="block text-sm">
+                <span className="mb-1 block font-semibold">Confirm Password</span>
+                <input
+                  type="password"
+                  value={form.confirmPassword}
+                  onChange={onChange("confirmPassword")}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none"
+                />
+                {form.confirmPassword && form.password !== form.confirmPassword && (
+                  <span className="mt-1 block text-xs text-red-600">Passwords do not match</span>
+                )}
+              </label>
+            )}
+
+            <button
+              type="submit"
+              disabled={submitting}
+              className="btn-primary w-full disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {submitting
+                ? "Please wait..."
+                : mode === "login"
+                  ? "Sign In"
+                  : "Create Account"}
+            </button>
+
+            {mode === "login" && (
+              <p className="text-sm text-muted">
+                Forgot your password? <button type="button" className="font-semibold text-brand">Reset here</button>
+              </p>
+            )}
+          </form>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+export default AuthPage;
