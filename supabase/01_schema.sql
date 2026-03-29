@@ -4,9 +4,26 @@
 create extension if not exists pgcrypto;
 
 -- Enums
-create type public.user_role as enum ('user', 'admin');
-create type public.payment_status as enum ('pending', 'paid', 'failed');
-create type public.order_status as enum ('created', 'processing', 'shipped', 'delivered', 'cancelled');
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'user_role') then
+    create type public.user_role as enum ('user', 'admin');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'payment_status') then
+    create type public.payment_status as enum ('pending', 'paid', 'failed');
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'order_status') then
+    create type public.order_status as enum ('created', 'processing', 'shipped', 'delivered', 'cancelled');
+  end if;
+end $$;
 
 -- Generic updated_at trigger
 create or replace function public.set_updated_at()
@@ -30,6 +47,7 @@ create table if not exists public.users (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists trg_users_updated_at on public.users;
 create trigger trg_users_updated_at
 before update on public.users
 for each row execute function public.set_updated_at();
@@ -75,6 +93,7 @@ create unique index if not exists idx_products_sku_unique on public.products(sku
 create index if not exists idx_products_category on public.products(category);
 create index if not exists idx_products_created_at on public.products(created_at desc);
 
+drop trigger if exists trg_products_updated_at on public.products;
 create trigger trg_products_updated_at
 before update on public.products
 for each row execute function public.set_updated_at();
@@ -87,6 +106,7 @@ create table if not exists public.categories (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists trg_categories_updated_at on public.categories;
 create trigger trg_categories_updated_at
 before update on public.categories
 for each row execute function public.set_updated_at();
@@ -159,6 +179,7 @@ create table if not exists public.product_reviews (
 
 create index if not exists idx_product_reviews_product on public.product_reviews(product_id);
 
+drop trigger if exists trg_product_reviews_updated_at on public.product_reviews;
 create trigger trg_product_reviews_updated_at
 before update on public.product_reviews
 for each row execute function public.set_updated_at();
@@ -179,6 +200,7 @@ create table if not exists public.carts (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists trg_carts_updated_at on public.carts;
 create trigger trg_carts_updated_at
 before update on public.carts
 for each row execute function public.set_updated_at();
@@ -192,6 +214,7 @@ create table if not exists public.cart_items (
   primary key (cart_id, product_id)
 );
 
+drop trigger if exists trg_cart_items_updated_at on public.cart_items;
 create trigger trg_cart_items_updated_at
 before update on public.cart_items
 for each row execute function public.set_updated_at();
@@ -210,6 +233,7 @@ create table if not exists public.orders (
 
 create index if not exists idx_orders_user_created on public.orders(user_id, created_at desc);
 
+drop trigger if exists trg_orders_updated_at on public.orders;
 create trigger trg_orders_updated_at
 before update on public.orders
 for each row execute function public.set_updated_at();
@@ -240,6 +264,7 @@ create table if not exists public.order_shipping_addresses (
   updated_at timestamptz not null default now()
 );
 
+drop trigger if exists trg_order_shipping_addresses_updated_at on public.order_shipping_addresses;
 create trigger trg_order_shipping_addresses_updated_at
 before update on public.order_shipping_addresses
 for each row execute function public.set_updated_at();
@@ -260,6 +285,7 @@ create table if not exists public.store_settings (
   check (id)
 );
 
+drop trigger if exists trg_store_settings_updated_at on public.store_settings;
 create trigger trg_store_settings_updated_at
 before update on public.store_settings
 for each row execute function public.set_updated_at();
@@ -284,15 +310,27 @@ alter table public.store_settings enable row level security;
 
 -- Temporary permissive policies for development.
 -- Replace with strict authenticated policies before production.
+drop policy if exists "dev_all_users" on public.users;
 create policy "dev_all_users" on public.users for all using (true) with check (true);
+drop policy if exists "dev_all_products" on public.products;
 create policy "dev_all_products" on public.products for all using (true) with check (true);
+drop policy if exists "dev_all_product_images" on public.product_images;
 create policy "dev_all_product_images" on public.product_images for all using (true) with check (true);
+drop policy if exists "dev_all_product_reviews" on public.product_reviews;
 create policy "dev_all_product_reviews" on public.product_reviews for all using (true) with check (true);
+drop policy if exists "dev_all_categories" on public.categories;
 create policy "dev_all_categories" on public.categories for all using (true) with check (true);
+drop policy if exists "dev_all_user_wishlist" on public.user_wishlist;
 create policy "dev_all_user_wishlist" on public.user_wishlist for all using (true) with check (true);
+drop policy if exists "dev_all_carts" on public.carts;
 create policy "dev_all_carts" on public.carts for all using (true) with check (true);
+drop policy if exists "dev_all_cart_items" on public.cart_items;
 create policy "dev_all_cart_items" on public.cart_items for all using (true) with check (true);
+drop policy if exists "dev_all_orders" on public.orders;
 create policy "dev_all_orders" on public.orders for all using (true) with check (true);
+drop policy if exists "dev_all_order_items" on public.order_items;
 create policy "dev_all_order_items" on public.order_items for all using (true) with check (true);
+drop policy if exists "dev_all_order_shipping_addresses" on public.order_shipping_addresses;
 create policy "dev_all_order_shipping_addresses" on public.order_shipping_addresses for all using (true) with check (true);
+drop policy if exists "dev_all_store_settings" on public.store_settings;
 create policy "dev_all_store_settings" on public.store_settings for all using (true) with check (true);
