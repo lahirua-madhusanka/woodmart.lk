@@ -43,9 +43,23 @@ create table if not exists public.users (
   email text not null unique,
   password_hash text not null,
   role public.user_role not null default 'user',
+  email_verified boolean not null default false,
+  email_verified_at timestamptz,
+  email_verification_token_hash text,
+  email_verification_expires_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.users add column if not exists email_verified boolean;
+alter table public.users add column if not exists email_verified_at timestamptz;
+alter table public.users add column if not exists email_verification_token_hash text;
+alter table public.users add column if not exists email_verification_expires_at timestamptz;
+update public.users set email_verified = true where email_verified is null;
+alter table public.users alter column email_verified set default false;
+alter table public.users alter column email_verified set not null;
+
+create index if not exists idx_users_email_verification_token_hash on public.users(email_verification_token_hash);
 
 drop trigger if exists trg_users_updated_at on public.users;
 create trigger trg_users_updated_at
@@ -226,10 +240,29 @@ create table if not exists public.orders (
   total_amount numeric(12,2) not null check (total_amount >= 0),
   payment_status public.payment_status not null default 'pending',
   order_status public.order_status not null default 'created',
+  payment_method text not null default 'cod' check (payment_method in ('cod', 'card', 'other')),
   payment_intent_id text not null default '',
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.orders add column if not exists payment_method text;
+update public.orders set payment_method = 'cod' where payment_method is null;
+alter table public.orders alter column payment_method set default 'cod';
+alter table public.orders alter column payment_method set not null;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'orders_payment_method_check'
+  ) then
+    alter table public.orders
+      add constraint orders_payment_method_check
+      check (payment_method in ('cod', 'card', 'other'));
+  end if;
+end $$;
 
 create index if not exists idx_orders_user_created on public.orders(user_id, created_at desc);
 
@@ -257,6 +290,7 @@ create table if not exists public.order_shipping_addresses (
   line1 text not null,
   line2 text not null default '',
   city text not null,
+  state text not null default '',
   postal_code text not null,
   country text not null,
   phone text not null,
@@ -264,9 +298,38 @@ create table if not exists public.order_shipping_addresses (
   updated_at timestamptz not null default now()
 );
 
+alter table public.order_shipping_addresses add column if not exists state text;
+update public.order_shipping_addresses set state = '' where state is null;
+alter table public.order_shipping_addresses alter column state set default '';
+alter table public.order_shipping_addresses alter column state set not null;
+
 drop trigger if exists trg_order_shipping_addresses_updated_at on public.order_shipping_addresses;
 create trigger trg_order_shipping_addresses_updated_at
 before update on public.order_shipping_addresses
+for each row execute function public.set_updated_at();
+
+create table if not exists public.user_addresses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.users(id) on delete cascade,
+  full_name text not null,
+  email text not null,
+  phone text not null,
+  line1 text not null,
+  line2 text not null default '',
+  city text not null,
+  state text not null,
+  postal_code text not null,
+  country text not null,
+  is_default boolean not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists idx_user_addresses_user on public.user_addresses(user_id);
+
+drop trigger if exists trg_user_addresses_updated_at on public.user_addresses;
+create trigger trg_user_addresses_updated_at
+before update on public.user_addresses
 for each row execute function public.set_updated_at();
 
 -- Optional: settings table for admin configuration
@@ -306,6 +369,7 @@ alter table public.cart_items enable row level security;
 alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
 alter table public.order_shipping_addresses enable row level security;
+alter table public.user_addresses enable row level security;
 alter table public.store_settings enable row level security;
 
 -- Temporary permissive policies for development.
@@ -332,5 +396,7 @@ drop policy if exists "dev_all_order_items" on public.order_items;
 create policy "dev_all_order_items" on public.order_items for all using (true) with check (true);
 drop policy if exists "dev_all_order_shipping_addresses" on public.order_shipping_addresses;
 create policy "dev_all_order_shipping_addresses" on public.order_shipping_addresses for all using (true) with check (true);
+drop policy if exists "dev_all_user_addresses" on public.user_addresses;
+create policy "dev_all_user_addresses" on public.user_addresses for all using (true) with check (true);
 drop policy if exists "dev_all_store_settings" on public.store_settings;
 create policy "dev_all_store_settings" on public.store_settings for all using (true) with check (true);

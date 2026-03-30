@@ -7,7 +7,43 @@ import { mapOrder } from "../utils/dbMappers.js";
 const stripe = env.stripeSecretKey ? new Stripe(env.stripeSecretKey) : null;
 
 const orderSelect =
-  "id, user_id, total_amount, payment_status, order_status, payment_intent_id, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, price, quantity), order_shipping_addresses(full_name, line1, line2, city, postal_code, country, phone)";
+  "id, user_id, total_amount, payment_status, order_status, payment_method, payment_intent_id, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, price, quantity), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone)";
+
+const mapAddressRow = (row) => ({
+  id: row.id,
+  fullName: row.full_name,
+  email: row.email,
+  phone: row.phone,
+  line1: row.line1,
+  line2: row.line2,
+  city: row.city,
+  state: row.state || "",
+  postalCode: row.postal_code,
+  country: row.country,
+  isDefault: Boolean(row.is_default),
+  createdAt: row.created_at,
+  updatedAt: row.updated_at,
+});
+
+const isMissingTableError = (error, tableName) => {
+  const message = String(error?.message || "").toLowerCase();
+  const details = String(error?.details || "").toLowerCase();
+  const schemaRef = `'public.${String(tableName || "").toLowerCase()}'`;
+  return (
+    (message.includes("schema cache") && message.includes(schemaRef)) ||
+    message.includes(`relation \"public.${String(tableName || "").toLowerCase()}\" does not exist`) ||
+    details.includes(`relation \"public.${String(tableName || "").toLowerCase()}\" does not exist`)
+  );
+};
+
+const isMissingColumnError = (error, columnName) => {
+  const message = String(error?.message || "").toLowerCase();
+  const details = String(error?.details || "").toLowerCase();
+  const column = String(columnName || "").toLowerCase();
+  return (
+    message.includes("could not find the") && message.includes(column) && message.includes("schema cache")
+  ) || details.includes(`column ${column} does not exist`) || message.includes(`column ${column} does not exist`);
+};
 
 const loadOrderById = async (id, includeUser = true) => {
   let query = supabase.from("orders").select(orderSelect).eq("id", id).maybeSingle();
@@ -62,7 +98,12 @@ export const createPaymentIntent = asyncHandler(async (req, res) => {
 });
 
 export const createOrder = asyncHandler(async (req, res) => {
-  const { shippingAddress, paymentStatus = "pending", paymentIntentId = "" } = req.body;
+  const {
+    shippingAddress,
+    paymentStatus = "pending",
+    paymentIntentId = "",
+    paymentMethod = "cod",
+  } = req.body;
 
   const { cart, items } = await loadCartWithProducts(req.user._id);
 
@@ -82,21 +123,24 @@ export const createOrder = asyncHandler(async (req, res) => {
     }
   }
 
-  const totalAmount = items.reduce(
-    (sum, item) => sum + item.quantity * Number(item.products.price || 0),
-    0
-  );
+  const totalAmount = items.reduce((sum, item) => {
+    const unitPrice = Number(item.products.discount_price ?? item.products.price ?? 0);
+    return sum + item.quantity * unitPrice;
+  }, 0);
 
-  const orderItems = items.map((item) => ({
-    product_id: item.products.id,
-    name: item.products.name,
-    image:
-      item.products.product_images
-        ?.slice()
-        .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))[0]?.image_url || "",
-    price: item.products.price,
-    quantity: item.quantity,
-  }));
+  const orderItems = items.map((item) => {
+    const unitPrice = Number(item.products.discount_price ?? item.products.price ?? 0);
+    return {
+      product_id: item.products.id,
+      name: item.products.name,
+      image:
+        item.products.product_images
+          ?.slice()
+          .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))[0]?.image_url || "",
+      price: unitPrice,
+      quantity: item.quantity,
+    };
+  });
 
   const { data: createdOrder, error: createOrderError } = await supabase
     .from("orders")
@@ -105,6 +149,7 @@ export const createOrder = asyncHandler(async (req, res) => {
       total_amount: totalAmount,
       payment_status: paymentStatus,
       order_status: "created",
+      payment_method: paymentMethod,
       payment_intent_id: paymentIntentId,
     })
     .select("id")
@@ -130,6 +175,7 @@ export const createOrder = asyncHandler(async (req, res) => {
     line1: shippingAddress.line1,
     line2: shippingAddress.line2 || "",
     city: shippingAddress.city,
+    state: shippingAddress.state || "",
     postal_code: shippingAddress.postalCode,
     country: shippingAddress.country,
     phone: shippingAddress.phone,
@@ -195,4 +241,225 @@ export const getOrderById = asyncHandler(async (req, res) => {
   }
 
   res.json(order);
+});
+
+export const getCheckoutProfile = asyncHandler(async (req, res) => {
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("id, name, email")
+    .eq("id", req.user._id)
+    .single();
+
+  if (userError || !user) {
+    res.status(404);
+    throw new Error("User not found");
+  }
+
+  const { data: addresses, error: addressError } = await supabase
+    .from("user_addresses")
+    .select("id, full_name, email, phone, line1, line2, city, state, postal_code, country, is_default, created_at, updated_at")
+    .eq("user_id", req.user._id)
+    .order("is_default", { ascending: false })
+    .order("updated_at", { ascending: false });
+
+  if (addressError && !isMissingTableError(addressError, "user_addresses")) {
+    res.status(500);
+    throw new Error(addressError.message);
+  }
+
+  const { data: latestOrder, error: latestOrderError } = await supabase
+    .from("orders")
+    .select("id, created_at")
+    .eq("user_id", req.user._id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (latestOrderError) {
+    res.status(500);
+    throw new Error(latestOrderError.message);
+  }
+
+  let latestShippingAddress = null;
+  if (latestOrder?.id) {
+    let shippingQuery = await supabase
+      .from("order_shipping_addresses")
+      .select("full_name, line1, line2, city, state, postal_code, country, phone")
+      .eq("order_id", latestOrder.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (shippingQuery.error && isMissingColumnError(shippingQuery.error, "state")) {
+      shippingQuery = await supabase
+        .from("order_shipping_addresses")
+        .select("full_name, line1, line2, city, postal_code, country, phone")
+        .eq("order_id", latestOrder.id)
+        .limit(1)
+        .maybeSingle();
+    }
+
+    if (shippingQuery.error) {
+      res.status(500);
+      throw new Error(shippingQuery.error.message);
+    }
+
+    latestShippingAddress = shippingQuery.data || null;
+  }
+
+  res.json({
+    customer: {
+      fullName: user.name || "",
+      email: user.email || "",
+    },
+    savedAddresses: (addresses || []).map(mapAddressRow),
+    addressBookReady: !addressError,
+    suggestedAddress: latestShippingAddress
+      ? {
+          fullName: latestShippingAddress.full_name || user.name || "",
+          email: user.email || "",
+          phone: latestShippingAddress.phone || "",
+          line1: latestShippingAddress.line1 || "",
+          line2: latestShippingAddress.line2 || "",
+          city: latestShippingAddress.city || "",
+          state: latestShippingAddress.state || "",
+          postalCode: latestShippingAddress.postal_code || "",
+          country: latestShippingAddress.country || "",
+        }
+      : null,
+  });
+});
+
+export const saveCheckoutAddress = asyncHandler(async (req, res) => {
+  const {
+    id,
+    fullName,
+    email,
+    phone,
+    line1,
+    line2 = "",
+    city,
+    state,
+    postalCode,
+    country,
+    isDefault = false,
+  } = req.body;
+
+  const { error: addressBookProbeError } = await supabase
+    .from("user_addresses")
+    .select("id")
+    .limit(1);
+
+  if (addressBookProbeError && isMissingTableError(addressBookProbeError, "user_addresses")) {
+    return res.json({
+      savedAddresses: [],
+      addressBookReady: false,
+      message: "Address book table is not available yet. Apply the latest database migration.",
+    });
+  }
+
+  if (isDefault) {
+    const { error: clearDefaultError } = await supabase
+      .from("user_addresses")
+      .update({ is_default: false })
+      .eq("user_id", req.user._id);
+
+    if (clearDefaultError) {
+      res.status(500);
+      throw new Error(clearDefaultError.message);
+    }
+  }
+
+  if (id) {
+    const { error: updateError } = await supabase
+      .from("user_addresses")
+      .update({
+        full_name: fullName,
+        email,
+        phone,
+        line1,
+        line2,
+        city,
+        state,
+        postal_code: postalCode,
+        country,
+        is_default: Boolean(isDefault),
+      })
+      .eq("id", id)
+      .eq("user_id", req.user._id);
+
+    if (updateError) {
+      res.status(500);
+      throw new Error(updateError.message);
+    }
+  } else {
+    const { error: createError } = await supabase.from("user_addresses").insert({
+      user_id: req.user._id,
+      full_name: fullName,
+      email,
+      phone,
+      line1,
+      line2,
+      city,
+      state,
+      postal_code: postalCode,
+      country,
+      is_default: Boolean(isDefault),
+    });
+
+    if (createError) {
+      res.status(500);
+      throw new Error(createError.message);
+    }
+  }
+
+  const { data: addresses, error: listError } = await supabase
+    .from("user_addresses")
+    .select("id, full_name, email, phone, line1, line2, city, state, postal_code, country, is_default, created_at, updated_at")
+    .eq("user_id", req.user._id)
+    .order("is_default", { ascending: false })
+    .order("updated_at", { ascending: false });
+
+  if (listError) {
+    res.status(500);
+    throw new Error(listError.message);
+  }
+
+  res.json({ savedAddresses: (addresses || []).map(mapAddressRow) });
+});
+
+export const deleteCheckoutAddress = asyncHandler(async (req, res) => {
+  const addressId = String(req.params.id || "").trim();
+
+  if (!addressId) {
+    res.status(400);
+    throw new Error("Address id is required");
+  }
+
+  const { error: deleteError } = await supabase
+    .from("user_addresses")
+    .delete()
+    .eq("id", addressId)
+    .eq("user_id", req.user._id);
+
+  if (deleteError && !isMissingTableError(deleteError, "user_addresses")) {
+    res.status(500);
+    throw new Error(deleteError.message);
+  }
+
+  const { data: addresses, error: listError } = await supabase
+    .from("user_addresses")
+    .select("id, full_name, email, phone, line1, line2, city, state, postal_code, country, is_default, created_at, updated_at")
+    .eq("user_id", req.user._id)
+    .order("is_default", { ascending: false })
+    .order("updated_at", { ascending: false });
+
+  if (listError && !isMissingTableError(listError, "user_addresses")) {
+    res.status(500);
+    throw new Error(listError.message);
+  }
+
+  res.json({
+    savedAddresses: (addresses || []).map(mapAddressRow),
+    addressBookReady: !listError,
+  });
 });

@@ -19,3 +19,18 @@ export const getOrderByIdApi = async (id) => {
   const { data } = await apiClient.get(`/orders/${id}`);
   return data;
 };
+
+export const getCheckoutProfileApi = async () => {
+  const { data } = await apiClient.get("/orders/checkout-profile");
+  return data;
+};
+
+export const saveCheckoutAddressApi = async (payload) => {
+  const { data } = await apiClient.post("/orders/address-book", payload);
+  return data;
+};
+
+export const deleteCheckoutAddressApi = async (id) => {
+  const { data } = await apiClient.delete(`/orders/address-book/${id}`);
+  return data;
+};

@@ -18,6 +18,9 @@ const AboutPage = lazy(() => import("./pages/AboutPage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
 const CustomProjectPage = lazy(() => import("./pages/CustomProjectPage"));
 const AuthPage = lazy(() => import("./pages/AuthPage"));
+const CheckEmailPage = lazy(() => import("./pages/CheckEmailPage"));
+const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
+const AccountPage = lazy(() => import("./pages/AccountPage"));
 
 // Admin area is split into isolated chunks and loaded only for admin routes.
 const AdminLayout = lazy(() => import("./admin/layout/AdminLayout"));
@@ -101,6 +104,14 @@ function App() {
           }
         />
         <Route
+          path="account"
+          element={
+            <PrivateRoute>
+              {withSuspense(<AccountPage />, "Loading account...")}
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="order-confirmation/:id"
           element={
             <PrivateRoute>
@@ -112,6 +123,8 @@ function App() {
         <Route path="contact" element={withSuspense(<ContactPage />, "Loading contact...")} />
         <Route path="custom-project" element={withSuspense(<CustomProjectPage />, "Loading custom project...")} />
         <Route path="auth" element={withSuspense(<AuthPage />, "Loading account...")} />
+        <Route path="auth/check-email" element={withSuspense(<CheckEmailPage />, "Loading verification details...")} />
+        <Route path="auth/verify-email" element={withSuspense(<VerifyEmailPage />, "Verifying email...")} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

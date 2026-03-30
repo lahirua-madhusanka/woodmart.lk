@@ -15,7 +15,30 @@ export const profileApi = async () => {
   return data;
 };
 
+export const updateProfileApi = async (payload) => {
+  const { data } = await apiClient.put("/auth/profile", payload);
+  return data;
+};
+
+export const changePasswordApi = async (payload) => {
+  const { data } = await apiClient.put("/auth/change-password", payload);
+  return data;
+};
+
 export const logoutApi = async () => {
   const { data } = await apiClient.post("/auth/logout");
+  return data;
+};
+
+export const verifyEmailApi = async (params) => {
+  const { tokenHash, type } = params;
+  const { data } = await apiClient.get("/auth/verify-email", {
+    params: { token_hash: tokenHash, type },
+  });
+  return data;
+};
+
+export const resendVerificationApi = async (payload) => {
+  const { data } = await apiClient.post("/auth/resend-verification", payload);
   return data;
 };

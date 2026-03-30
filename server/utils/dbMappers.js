@@ -4,6 +4,8 @@ export const mapUser = (row) => ({
   name: row.name,
   email: row.email,
   role: row.role,
+  emailVerified: row.email_verified ?? true,
+  emailVerifiedAt: row.email_verified_at || null,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -69,12 +71,14 @@ export const mapOrder = (row, options = {}) => {
     totalAmount: Number(row.total_amount || 0),
     paymentStatus: row.payment_status,
     orderStatus: row.order_status,
+    paymentMethod: row.payment_method || "cod",
     shippingAddress: shipping
       ? {
           fullName: shipping.full_name,
           line1: shipping.line1,
           line2: shipping.line2,
           city: shipping.city,
+          state: shipping.state || "",
           postalCode: shipping.postal_code,
           country: shipping.country,
           phone: shipping.phone,

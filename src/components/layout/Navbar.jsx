@@ -125,10 +125,10 @@ function Navbar() {
             </RoutePrefetchLink>
 
             <NavLink
-              to={isAuthenticated ? "/orders" : "/auth"}
+              to={isAuthenticated ? "/account" : "/auth"}
               className="rounded-full p-2 text-slate-700 transition hover:bg-slate-100 hover:text-brand"
               aria-label="Account"
-              title={isAuthenticated ? "Orders" : "Login"}
+              title={isAuthenticated ? "My Account" : "Login"}
               onMouseEnter={triggerAuthPrefetch}
               onFocus={triggerAuthPrefetch}
               {...(!isAuthenticated ? authPrefetch : {})}
@@ -189,11 +189,11 @@ function Navbar() {
               </RoutePrefetchLink>
 
               <NavLink
-                to={isAuthenticated ? "/orders" : "/auth"}
+                to={isAuthenticated ? "/account" : "/auth"}
                 onClick={() => setMobileOpen(false)}
                 className="rounded-full p-2 text-slate-700 transition hover:bg-slate-100 hover:text-brand"
                 aria-label="Account"
-                title={isAuthenticated ? "Orders" : "Login"}
+                title={isAuthenticated ? "My Account" : "Login"}
                 onMouseEnter={triggerAuthPrefetch}
                 onFocus={triggerAuthPrefetch}
                 {...(!isAuthenticated ? authPrefetch : {})}
@@ -220,8 +220,8 @@ function Navbar() {
               ))}
               {isAuthenticated ? (
                 <>
-                  <NavLink to="/orders" onClick={() => setMobileOpen(false)} className={navLinkClass}>
-                    My Orders
+                  <NavLink to="/account" onClick={() => setMobileOpen(false)} className={navLinkClass}>
+                    My Account
                   </NavLink>
                   {user?.role === "admin" ? (
                     <NavLink to="/admin" onClick={() => setMobileOpen(false)} className={navLinkClass}>
