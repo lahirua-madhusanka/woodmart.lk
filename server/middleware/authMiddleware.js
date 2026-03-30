@@ -4,13 +4,14 @@ import env from "../config/env.js";
 import supabase from "../config/supabase.js";
 
 const extractToken = (req) => {
-  if (req.cookies?.token) {
-    return req.cookies.token;
-  }
-
   const authHeader = req.headers.authorization || "";
   if (authHeader.startsWith("Bearer ")) {
     return authHeader.split(" ")[1];
+  }
+
+  // Fallback to cookie auth only when no explicit bearer token is provided.
+  if (req.cookies?.token) {
+    return req.cookies.token;
   }
 
   return null;

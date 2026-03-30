@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { useAdminAuth } from "./AdminAuthContext";
 import { useAuth } from "./AuthContext";
 import { getAdminUnreadCountApi } from "../services/chatService";
 import { disconnectSocket, getSocket } from "../services/socketService";
@@ -6,13 +8,22 @@ import { disconnectSocket, getSocket } from "../services/socketService";
 const ChatRealtimeContext = createContext(null);
 
 export function ChatRealtimeProvider({ children }) {
-  const { token, user, isAuthenticated } = useAuth();
+  const location = useLocation();
+  const { token: userToken } = useAuth();
+  const {
+    token: adminToken,
+    user: adminUser,
+    isAuthenticated: isAdminAuthenticated,
+  } = useAdminAuth();
   const [socket, setSocket] = useState(null);
   const [connected, setConnected] = useState(false);
   const [adminUnreadCount, setAdminUnreadCount] = useState(0);
 
+  const isAdminArea = location.pathname.startsWith("/admin");
+  const activeToken = isAdminArea ? adminToken || userToken : userToken || adminToken;
+
   const refreshAdminUnreadCount = async () => {
-    if (!isAuthenticated || user?.role !== "admin") {
+    if (!isAdminAuthenticated || adminUser?.role !== "admin") {
       setAdminUnreadCount(0);
       return 0;
     }
@@ -28,7 +39,7 @@ export function ChatRealtimeProvider({ children }) {
   };
 
   useEffect(() => {
-    if (!token || !isAuthenticated) {
+    if (!activeToken) {
       disconnectSocket();
       setSocket(null);
       setConnected(false);
@@ -36,7 +47,7 @@ export function ChatRealtimeProvider({ children }) {
       return;
     }
 
-    const client = getSocket(token);
+    const client = getSocket(activeToken);
     setSocket(client);
 
     const onConnect = () => setConnected(true);
@@ -53,10 +64,12 @@ export function ChatRealtimeProvider({ children }) {
       client.off("connect", onConnect);
       client.off("disconnect", onDisconnect);
     };
-  }, [isAuthenticated, token]);
+  }, [activeToken]);
 
   useEffect(() => {
-    if (!socket || user?.role !== "admin") {
+    const usingAdminSocket = isAdminArea ? activeToken === adminToken : false;
+
+    if (!socket || !isAdminAuthenticated || adminUser?.role !== "admin" || !usingAdminSocket) {
       return;
     }
 
@@ -75,7 +88,7 @@ export function ChatRealtimeProvider({ children }) {
       socket.off("chat:conversation-updated", onChatSignal);
       socket.off("chat:read-updated", onChatSignal);
     };
-  }, [socket, user?.role]);
+  }, [socket, adminToken, activeToken, isAdminAuthenticated, adminUser?.role, isAdminArea]);
 
   const value = useMemo(
     () => ({

@@ -1,4 +1,5 @@
 import apiClient from "./apiClient";
+import adminApiClient from "../admin/services/adminApiClient";
 
 export const getMyConversationApi = async () => {
   const { data } = await apiClient.get("/chat/me");
@@ -11,6 +12,6 @@ export const sendMyMessageApi = async (text) => {
 };
 
 export const getAdminUnreadCountApi = async () => {
-  const { data } = await apiClient.get("/chat/admin/unread-count");
+  const { data } = await adminApiClient.get("/chat/admin/unread-count");
   return data;
 };
