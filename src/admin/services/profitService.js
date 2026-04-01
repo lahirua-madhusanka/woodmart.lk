@@ -18,5 +18,6 @@ export const getProfitReport = async (params = {}) =>
       orders: [],
       soldProducts: [],
       trend: [],
+      orderTrend: [],
     }
   );

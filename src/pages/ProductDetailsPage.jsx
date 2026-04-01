@@ -7,7 +7,12 @@ import { useStore } from "../context/StoreContext";
 import { useAuth } from "../context/AuthContext";
 import { useStorefrontSettings } from "../context/StorefrontSettingsContext";
 import { getApiErrorMessage } from "../services/apiClient";
-import { addProductReviewApi, getProductByIdApi } from "../services/productService";
+import {
+  addProductReviewApi,
+  getProductByIdApi,
+  getReviewEligibilityApi,
+  updateProductReviewApi,
+} from "../services/productService";
 
 function ProductDetailsPage() {
   const { id } = useParams();
@@ -26,6 +31,14 @@ function ProductDetailsPage() {
   const [review, setReview] = useState({ rating: 5, comment: "" });
   const [submittingReview, setSubmittingReview] = useState(false);
   const [localReviews, setLocalReviews] = useState([]);
+  const [reviewEligibility, setReviewEligibility] = useState({
+    eligible: false,
+    canReview: false,
+    canEdit: false,
+    message: "Only verified buyers can review this product",
+    existingReview: null,
+  });
+  const [loadingEligibility, setLoadingEligibility] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -79,6 +92,68 @@ function ProductDetailsPage() {
   useEffect(() => {
     setLocalReviews(Array.isArray(product?.reviews) ? product.reviews : []);
   }, [product]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadEligibility = async () => {
+      if (!isAuthenticated || !productId) {
+        if (!ignore) {
+          setReviewEligibility({
+            eligible: false,
+            canReview: false,
+            canEdit: false,
+            message: "Only verified buyers can review this product",
+            existingReview: null,
+          });
+        }
+        return;
+      }
+
+      setLoadingEligibility(true);
+      try {
+        const data = await getReviewEligibilityApi(productId);
+        if (!ignore) {
+          setReviewEligibility({
+            eligible: Boolean(data?.eligible),
+            canReview: Boolean(data?.canReview),
+            canEdit: Boolean(data?.canEdit),
+            message: data?.message || "Only verified buyers can review this product",
+            existingReview: data?.existingReview || null,
+          });
+
+          if (data?.existingReview) {
+            setReview({
+              rating: Number(data.existingReview.rating || 5),
+              comment: data.existingReview.comment || "",
+            });
+          } else {
+            setReview({ rating: 5, comment: "" });
+          }
+        }
+      } catch (error) {
+        if (!ignore) {
+          setReviewEligibility({
+            eligible: false,
+            canReview: false,
+            canEdit: false,
+            message: getApiErrorMessage(error),
+            existingReview: null,
+          });
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingEligibility(false);
+        }
+      }
+    };
+
+    loadEligibility();
+
+    return () => {
+      ignore = true;
+    };
+  }, [isAuthenticated, productId]);
 
   const related = useMemo(() => {
     if (!product) return [];
@@ -197,6 +272,11 @@ function ProductDetailsPage() {
       return;
     }
 
+    if (!reviewEligibility.eligible) {
+      toast.error("You can only review products you have purchased and received.");
+      return;
+    }
+
     if (!String(review.comment || "").trim()) {
       toast.error("Please add a review comment");
       return;
@@ -204,19 +284,31 @@ function ProductDetailsPage() {
 
     setSubmittingReview(true);
     try {
-      await addProductReviewApi(productId, review);
-      toast.success("Review submitted");
-      setLocalReviews((prev) => [
-        {
-          _id: `new-${Date.now()}`,
-          name: user?.name || "You",
-          rating: Number(review.rating || 0),
-          comment: review.comment,
-          createdAt: new Date().toISOString(),
-        },
+      const payload = {
+        rating: Number(review.rating || 0),
+        comment: String(review.comment || "").trim(),
+      };
+      const response = reviewEligibility.canEdit
+        ? await updateProductReviewApi(productId, payload)
+        : await addProductReviewApi(productId, payload);
+
+      const returnedReview = response?.review;
+      if (returnedReview) {
+        setLocalReviews((prev) => {
+          const otherReviews = prev.filter((entry) => String(entry.user || "") !== String(user?._id || ""));
+          return [returnedReview, ...otherReviews];
+        });
+      }
+
+      setReviewEligibility((prev) => ({
         ...prev,
-      ]);
-      setReview({ rating: 5, comment: "" });
+        canReview: false,
+        canEdit: true,
+        existingReview: returnedReview || prev.existingReview,
+        message: "You already reviewed this product. You can edit your review.",
+      }));
+
+      toast.success(reviewEligibility.canEdit ? "Review updated" : "Review submitted");
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {
@@ -411,30 +503,44 @@ function ProductDetailsPage() {
                 </div>
               </div>
 
-              <form onSubmit={onSubmitReview} className="space-y-3 rounded-lg bg-slate-50 p-4">
-                <h3 className="font-semibold text-ink">Write a review</h3>
-                <select
-                  value={review.rating}
-                  onChange={(event) => setReview((prev) => ({ ...prev, rating: Number(event.target.value) }))}
-                  className="rounded-lg border border-slate-300 bg-white px-3 py-2"
-                >
-                  <option value={5}>5 - Excellent</option>
-                  <option value={4}>4 - Very good</option>
-                  <option value={3}>3 - Good</option>
-                  <option value={2}>2 - Fair</option>
-                  <option value={1}>1 - Poor</option>
-                </select>
-                <textarea
-                  value={review.comment}
-                  onChange={(event) => setReview((prev) => ({ ...prev, comment: event.target.value }))}
-                  rows={3}
-                  placeholder="Share your experience"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none"
-                />
-                <button disabled={submittingReview} className="btn-primary disabled:cursor-not-allowed disabled:opacity-60">
-                  {submittingReview ? "Submitting..." : "Submit Review"}
-                </button>
-              </form>
+              {loadingEligibility ? (
+                <div className="space-y-3 rounded-lg bg-slate-50 p-4">
+                  <h3 className="font-semibold text-ink">Checking review eligibility...</h3>
+                </div>
+              ) : isAuthenticated && (reviewEligibility.canReview || reviewEligibility.canEdit) ? (
+                <form onSubmit={onSubmitReview} className="space-y-3 rounded-lg bg-slate-50 p-4">
+                  <h3 className="font-semibold text-ink">
+                    {reviewEligibility.canEdit ? "Edit your review" : "Write a review"}
+                  </h3>
+                  <p className="text-xs text-emerald-700">Only verified buyers can review this product.</p>
+                  <select
+                    value={review.rating}
+                    onChange={(event) => setReview((prev) => ({ ...prev, rating: Number(event.target.value) }))}
+                    className="rounded-lg border border-slate-300 bg-white px-3 py-2"
+                  >
+                    <option value={5}>5 - Excellent</option>
+                    <option value={4}>4 - Very good</option>
+                    <option value={3}>3 - Good</option>
+                    <option value={2}>2 - Fair</option>
+                    <option value={1}>1 - Poor</option>
+                  </select>
+                  <textarea
+                    value={review.comment}
+                    onChange={(event) => setReview((prev) => ({ ...prev, comment: event.target.value }))}
+                    rows={3}
+                    placeholder="Share your experience"
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 outline-none"
+                  />
+                  <button disabled={submittingReview} className="btn-primary disabled:cursor-not-allowed disabled:opacity-60">
+                    {submittingReview ? "Submitting..." : reviewEligibility.canEdit ? "Update Review" : "Submit Review"}
+                  </button>
+                </form>
+              ) : (
+                <div className="space-y-2 rounded-lg border border-dashed border-slate-300 bg-slate-50 p-4">
+                  <h3 className="font-semibold text-ink">Only verified buyers can review this product</h3>
+                  <p>{reviewEligibility.message || "You can only review products you have purchased and received."}</p>
+                </div>
+              )}
             </div>
 
             {!localReviews.length ? (
@@ -446,7 +552,12 @@ function ProductDetailsPage() {
                 {localReviews.map((entry) => (
                   <article key={entry._id || `${entry.name}-${entry.createdAt}`} className="rounded-lg bg-slate-50 p-4">
                     <div className="flex items-center justify-between gap-3">
-                      <p className="font-semibold text-ink">{entry.name || "Anonymous"}</p>
+                      <div>
+                        <p className="font-semibold text-ink">{entry.name || "Anonymous"}</p>
+                        {entry.verifiedPurchase ? (
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Verified Purchase</p>
+                        ) : null}
+                      </div>
                       <p className="text-xs text-muted">{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : ""}</p>
                     </div>
                     <p className="mt-1 text-amber-600">{"★".repeat(Math.max(1, Math.min(5, Math.round(Number(entry.rating || 0)))))} <span className="text-xs text-muted">({Number(entry.rating || 0).toFixed(1)})</span></p>

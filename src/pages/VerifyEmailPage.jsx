@@ -8,20 +8,11 @@ function VerifyEmailPage() {
   const [status, setStatus] = useState("loading");
   const [message, setMessage] = useState("Verifying your email link...");
 
-  const tokenHash = useMemo(() => searchParams.get("token_hash") || "", [searchParams]);
-  const type = useMemo(() => searchParams.get("type") || "signup", [searchParams]);
+  const token = useMemo(() => searchParams.get("token") || "", [searchParams]);
   const errorDescription = useMemo(
     () => searchParams.get("error_description") || searchParams.get("error") || "",
     [searchParams]
   );
-  const hashParams = useMemo(() => {
-    const raw = window.location.hash.startsWith("#")
-      ? window.location.hash.slice(1)
-      : window.location.hash;
-    return new URLSearchParams(raw);
-  }, []);
-  const hashAccessToken = useMemo(() => hashParams.get("access_token") || "", [hashParams]);
-  const hashType = useMemo(() => hashParams.get("type") || "", [hashParams]);
 
   useEffect(() => {
     const run = async () => {
@@ -31,21 +22,14 @@ function VerifyEmailPage() {
         return;
       }
 
-      // Supabase may redirect with auth tokens in URL hash after successful confirmation.
-      if (hashAccessToken && hashType === "signup") {
-        setStatus("success");
-        setMessage("Your email is verified. You can now log in.");
-        return;
-      }
-
-      if (!tokenHash) {
+      if (!token) {
         setStatus("error");
         setMessage("Invalid verification link. Please request a new verification email.");
         return;
       }
 
       try {
-        const response = await verifyEmail({ tokenHash, type });
+        const response = await verifyEmail({ token });
         setStatus("success");
         setMessage(response.message || "Your email is verified. You can now log in.");
       } catch {
@@ -55,7 +39,7 @@ function VerifyEmailPage() {
     };
 
     run();
-  }, [errorDescription, hashAccessToken, hashType, tokenHash, type, verifyEmail]);
+  }, [errorDescription, token, verifyEmail]);
 
   return (
     <section className="container-pad py-16">

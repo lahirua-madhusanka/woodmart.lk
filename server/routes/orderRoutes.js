@@ -37,6 +37,11 @@ router.post(
     body("paymentMethod")
       .isIn(["cod", "card", "other"])
       .withMessage("Payment method is required"),
+    body("couponCode")
+      .optional({ nullable: true, checkFalsy: true })
+      .trim()
+      .isLength({ min: 2, max: 40 })
+      .withMessage("Coupon code must be between 2 and 40 characters"),
   ],
   validateRequest,
   createOrder

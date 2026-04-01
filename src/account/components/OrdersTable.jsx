@@ -1,6 +1,17 @@
 import EmptyState from "./EmptyState";
 
+const COURIER_TRACKING_URL = "https://www.prontolanka.lk/";
+
 function OrdersTable({ orders = [], loading, onViewDetails }) {
+  const handleCopyTracking = async (trackingNumber) => {
+    if (!trackingNumber) return;
+    try {
+      await navigator.clipboard.writeText(trackingNumber);
+    } catch (error) {
+      // Ignore clipboard failures in table action context.
+    }
+  };
+
   if (loading) {
     return <div className="text-sm text-muted">Loading orders...</div>;
   }
@@ -22,6 +33,7 @@ function OrdersTable({ orders = [], loading, onViewDetails }) {
             <th className="py-3 pr-4">Order #</th>
             <th className="py-3 pr-4">Date</th>
             <th className="py-3 pr-4">Status</th>
+            <th className="py-3 pr-4">Tracking</th>
             <th className="py-3 pr-4">Total</th>
             <th className="py-3">Action</th>
           </tr>
@@ -35,6 +47,29 @@ function OrdersTable({ orders = [], loading, onViewDetails }) {
                 <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-semibold capitalize text-slate-700">
                   {order.orderStatus || "created"}
                 </span>
+              </td>
+              <td className="py-3 pr-4 text-xs text-muted">
+                {order.trackingNumber ? (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-ink">{order.trackingNumber}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyTracking(order.trackingNumber)}
+                      className="rounded border border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-ink"
+                    >
+                      Copy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => window.open(COURIER_TRACKING_URL, "_blank", "noopener,noreferrer")}
+                      className="rounded border border-slate-300 px-2 py-0.5 text-[11px] font-semibold text-ink"
+                    >
+                      Track
+                    </button>
+                  </div>
+                ) : (
+                  "-"
+                )}
               </td>
               <td className="py-3 pr-4 font-semibold text-ink">Rs. {Number(order.totalAmount || 0).toFixed(2)}</td>
               <td className="py-3">

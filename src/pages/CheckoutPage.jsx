@@ -8,6 +8,7 @@ import { useStorefrontSettings } from "../context/StorefrontSettingsContext";
 import { useStore } from "../context/StoreContext";
 import { getApiErrorMessage } from "../services/apiClient";
 import {
+  applyCouponApi,
   createOrderApi,
   createPaymentIntentApi,
   getCheckoutProfileApi,
@@ -58,11 +59,46 @@ function CheckoutInner({ stripeEnabled }) {
   const [paymentMethod, setPaymentMethod] = useState(stripeEnabled ? "card" : "cod");
   const [saveForFuture, setSaveForFuture] = useState(false);
   const [address, setAddress] = useState({ ...emptyAddress });
+  const [couponCodeInput, setCouponCodeInput] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponDiscountAmount, setCouponDiscountAmount] = useState(0);
 
   const total = useMemo(
-    () => Number(cartSubtotal || 0) + Number(cartShippingTotal || 0),
-    [cartShippingTotal, cartSubtotal]
+    () => Math.max(0, Number(cartSubtotal || 0) + Number(cartShippingTotal || 0) - Number(couponDiscountAmount || 0)),
+    [cartShippingTotal, cartSubtotal, couponDiscountAmount]
   );
+
+  const handleApplyCoupon = async () => {
+    const code = String(couponCodeInput || "").trim();
+    if (!code) {
+      toast.error("Please enter a coupon code");
+      return;
+    }
+
+    setApplyingCoupon(true);
+    try {
+      const response = await applyCouponApi(code);
+      const coupon = response?.coupon || null;
+      const discountAmount = Number(coupon?.discountAmount || 0);
+      setAppliedCoupon(coupon);
+      setCouponDiscountAmount(discountAmount);
+      setCouponCodeInput(coupon?.code || code.toUpperCase());
+      toast.success(response?.message || "Coupon applied successfully");
+    } catch (error) {
+      setAppliedCoupon(null);
+      setCouponDiscountAmount(0);
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setApplyingCoupon(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponDiscountAmount(0);
+    setCouponCodeInput("");
+  };
 
   useEffect(() => {
     let ignore = false;
@@ -295,6 +331,7 @@ function CheckoutInner({ stripeEnabled }) {
         paymentMethod,
         paymentStatus,
         paymentIntentId,
+        couponCode: appliedCoupon?.code || null,
       });
 
       toast.success("Order placed successfully");
@@ -465,6 +502,37 @@ function CheckoutInner({ stripeEnabled }) {
 
         <aside className="h-fit rounded-xl border border-slate-200 bg-white p-5">
           <h2 className="text-lg font-semibold text-ink">Order Summary</h2>
+
+          <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <label className="block text-xs font-semibold uppercase tracking-wide text-muted">Coupon code</label>
+            <div className="mt-2 flex gap-2">
+              <input
+                value={couponCodeInput}
+                onChange={(event) => setCouponCodeInput(event.target.value.toUpperCase())}
+                placeholder="Enter coupon code"
+                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                onClick={handleApplyCoupon}
+                disabled={applyingCoupon}
+                className="rounded-lg border border-brand px-3 py-2 text-sm font-semibold text-brand disabled:opacity-60"
+              >
+                {applyingCoupon ? "Applying..." : "Apply"}
+              </button>
+            </div>
+            {appliedCoupon ? (
+              <div className="mt-2 flex items-center justify-between gap-2 text-xs text-emerald-700">
+                <span>
+                  Applied {appliedCoupon.code} ({appliedCoupon.title})
+                </span>
+                <button type="button" onClick={removeCoupon} className="font-semibold text-rose-600">
+                  Remove
+                </button>
+              </div>
+            ) : null}
+          </div>
+
           <div className="mt-4 space-y-3">
             {cartDetailedItems.map((item) => {
               const unitPrice = Number(item.unitPrice ?? item.discountPrice ?? item.price ?? 0);
@@ -490,7 +558,8 @@ function CheckoutInner({ stripeEnabled }) {
           <div className="mt-4 space-y-2 border-t border-slate-200 pt-4 text-sm">
             <div className="flex justify-between"><span className="text-muted">Subtotal</span><span>{formatMoney(cartSubtotal)}</span></div>
             <div className="flex justify-between"><span className="text-muted">Shipping</span><span>{formatMoney(Number(cartShippingTotal || 0))}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Discount</span><span>- {formatMoney(Number(cartDiscountTotal || 0))}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Product Discount</span><span>- {formatMoney(Number(cartDiscountTotal || 0))}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Coupon Discount</span><span>- {formatMoney(Number(couponDiscountAmount || 0))}</span></div>
             <div className="flex justify-between text-base font-semibold"><span>Total</span><span className="text-brand-dark">{formatMoney(total)}</span></div>
           </div>
 

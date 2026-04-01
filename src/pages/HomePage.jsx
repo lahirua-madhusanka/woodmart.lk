@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo } from "react";
 import { ArrowRight } from "lucide-react";
 import HeroSection from "../components/home/HeroSection";
+import StorefrontBannerSection from "../components/banners/StorefrontBannerSection";
 import LazySection from "../components/common/LazySection";
 import RoutePrefetchLink from "../components/common/RoutePrefetchLink";
 import SectionSkeleton from "../components/common/SectionSkeleton";
@@ -10,7 +11,6 @@ import { warmLikelyStorefrontRoutes } from "../utils/performance/prefetchRoutes"
 // Keep only above-the-fold content eager and defer all heavy secondary sections.
 const CategorySection = lazy(() => import("../components/home/CategorySection"));
 const ProductGrid = lazy(() => import("../components/products/ProductGrid"));
-const PromoBanner = lazy(() => import("../components/home/PromoBanner"));
 const BenefitsSection = lazy(() => import("../components/home/BenefitsSection"));
 const TestimonialsSection = lazy(() => import("../components/home/TestimonialsSection"));
 const BrandLogosSection = lazy(() => import("../components/home/BrandLogosSection"));
@@ -136,7 +136,16 @@ function HomePage() {
         fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}
       >
         <Suspense fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}>
-          <PromoBanner />
+          <StorefrontBannerSection section="promo_strip" columns={2} containerClassName="container-pad py-10" />
+        </Suspense>
+      </LazySection>
+
+      <LazySection
+        minHeight={280}
+        fallback={<SectionSkeleton minHeight={280} title="Loading category promotions..." />}
+      >
+        <Suspense fallback={<SectionSkeleton minHeight={280} title="Loading category promotions..." />}>
+          <StorefrontBannerSection section="category_promo" columns={2} containerClassName="container-pad py-8" />
         </Suspense>
       </LazySection>
 
@@ -181,6 +190,15 @@ function HomePage() {
 
       <LazySection
         minHeight={260}
+        fallback={<SectionSkeleton minHeight={260} title="Loading featured promotions..." />}
+      >
+        <Suspense fallback={<SectionSkeleton minHeight={260} title="Loading featured promotions..." />}>
+          <StorefrontBannerSection section="featured_section" columns={1} containerClassName="container-pad py-8" />
+        </Suspense>
+      </LazySection>
+
+      <LazySection
+        minHeight={260}
         fallback={<SectionSkeleton minHeight={260} title="Loading testimonials..." />}
       >
         <Suspense fallback={<SectionSkeleton minHeight={260} title="Loading testimonials..." />}>
@@ -194,6 +212,15 @@ function HomePage() {
       >
         <Suspense fallback={<SectionSkeleton minHeight={220} title="Loading partner brands..." />}>
           <BrandLogosSection />
+        </Suspense>
+      </LazySection>
+
+      <LazySection
+        minHeight={260}
+        fallback={<SectionSkeleton minHeight={260} title="Loading additional banners..." />}
+      >
+        <Suspense fallback={<SectionSkeleton minHeight={260} title="Loading additional banners..." />}>
+          <StorefrontBannerSection section="secondary_banner" columns={2} containerClassName="container-pad py-8" />
         </Suspense>
       </LazySection>
 

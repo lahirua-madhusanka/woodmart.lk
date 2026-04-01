@@ -1,9 +1,13 @@
 import asyncHandler from "express-async-handler";
 import supabase from "../config/supabase.js";
+import { addOrderStatusHistory, autoDeliverIfDue, buildOrderLifecycleTimestamps } from "../services/orderWorkflow.js";
 import { mapOrder, mapProduct, mapUser } from "../utils/dbMappers.js";
 
+const STOREFRONT_ASSETS_BUCKET =
+  process.env.STOREFRONT_ASSETS_BUCKET || "storefront-assets";
+
 const orderSelect =
-  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone)";
+  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
 
 const productSelect =
   "id, name, description, price, discount_price, product_cost, shipping_price, category, stock, rating, created_at, updated_at, product_images(image_url, sort_order), product_reviews(id, user_id, name, rating, comment, created_at, updated_at)";
@@ -18,6 +22,15 @@ const defaultStoreSettings = {
   currency: "Rs.",
   freeShippingThreshold: 199,
   themeAccent: "#0959a4",
+  heroTitle: "Craft your space with timeless pieces.",
+  heroSubtitle:
+    "Discover premium furniture, decor, and lifestyle objects inspired by natural materials and modern living.",
+  heroPrimaryButtonText: "Shop Now",
+  heroPrimaryButtonLink: "/shop",
+  heroSecondaryButtonText: "View Collection",
+  heroSecondaryButtonLink: "/shop",
+  heroImage:
+    "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80",
 };
 
 const isMissingRelationError = (message = "") => {
@@ -28,6 +41,16 @@ const isMissingRelationError = (message = "") => {
 const isMissingColumnError = (message = "") => {
   const normalized = String(message).toLowerCase();
   return normalized.includes("column") && normalized.includes("does not exist");
+};
+
+const isPermissionError = (message = "") => {
+  const normalized = String(message).toLowerCase();
+  return (
+    normalized.includes("permission") ||
+    normalized.includes("not authorized") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("forbidden")
+  );
 };
 
 const startOfDay = (date) => {
@@ -107,11 +130,54 @@ const mapStoreSettings = (row = {}) => ({
     row.free_shipping_threshold ?? defaultStoreSettings.freeShippingThreshold
   ),
   themeAccent: row.theme_accent ?? defaultStoreSettings.themeAccent,
+  heroTitle: row.hero_title ?? defaultStoreSettings.heroTitle,
+  heroSubtitle: row.hero_subtitle ?? defaultStoreSettings.heroSubtitle,
+  heroPrimaryButtonText:
+    row.hero_primary_button_text ?? defaultStoreSettings.heroPrimaryButtonText,
+  heroPrimaryButtonLink:
+    row.hero_primary_button_link ?? defaultStoreSettings.heroPrimaryButtonLink,
+  heroSecondaryButtonText:
+    row.hero_secondary_button_text ?? defaultStoreSettings.heroSecondaryButtonText,
+  heroSecondaryButtonLink:
+    row.hero_secondary_button_link ?? defaultStoreSettings.heroSecondaryButtonLink,
+  heroImage: row.hero_image_url ?? defaultStoreSettings.heroImage,
 });
 
 const normalizeNumericSetting = (value, fallback) => {
   const normalized = Number(value);
   return Number.isFinite(normalized) ? normalized : fallback;
+};
+
+const ensureStorefrontAssetsBucket = async () => {
+  const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
+  if (bucketsError) {
+    if (isPermissionError(bucketsError.message)) {
+      throw new Error(
+        "Storage access denied. Set SUPABASE_SERVICE_ROLE_KEY on the server and ensure bucket '" +
+          STOREFRONT_ASSETS_BUCKET +
+          "' exists in Supabase Storage."
+      );
+    }
+    throw new Error(bucketsError.message);
+  }
+
+  const exists = (buckets || []).some((bucket) => bucket.name === STOREFRONT_ASSETS_BUCKET);
+  if (exists) return;
+
+  const { error: createBucketError } = await supabase.storage.createBucket(STOREFRONT_ASSETS_BUCKET, {
+    public: true,
+  });
+
+  if (createBucketError) {
+    if (isPermissionError(createBucketError.message)) {
+      throw new Error(
+        "Cannot create storage bucket. Set SUPABASE_SERVICE_ROLE_KEY on the server or create bucket '" +
+          STOREFRONT_ASSETS_BUCKET +
+          "' manually in Supabase Storage."
+      );
+    }
+    throw new Error(createBucketError.message);
+  }
 };
 
 const buildStoreSettingsPayload = (body = {}) => ({
@@ -126,6 +192,22 @@ const buildStoreSettingsPayload = (body = {}) => ({
     normalizeNumericSetting(body.freeShippingThreshold, defaultStoreSettings.freeShippingThreshold)
   ),
   theme_accent: String(body.themeAccent ?? defaultStoreSettings.themeAccent).trim() || defaultStoreSettings.themeAccent,
+  hero_title: String(body.heroTitle ?? defaultStoreSettings.heroTitle).trim() || defaultStoreSettings.heroTitle,
+  hero_subtitle:
+    String(body.heroSubtitle ?? defaultStoreSettings.heroSubtitle).trim() || defaultStoreSettings.heroSubtitle,
+  hero_primary_button_text:
+    String(body.heroPrimaryButtonText ?? defaultStoreSettings.heroPrimaryButtonText).trim() ||
+    defaultStoreSettings.heroPrimaryButtonText,
+  hero_primary_button_link:
+    String(body.heroPrimaryButtonLink ?? defaultStoreSettings.heroPrimaryButtonLink).trim() ||
+    defaultStoreSettings.heroPrimaryButtonLink,
+  hero_secondary_button_text:
+    String(body.heroSecondaryButtonText ?? defaultStoreSettings.heroSecondaryButtonText).trim() ||
+    defaultStoreSettings.heroSecondaryButtonText,
+  hero_secondary_button_link:
+    String(body.heroSecondaryButtonLink ?? defaultStoreSettings.heroSecondaryButtonLink).trim() ||
+    defaultStoreSettings.heroSecondaryButtonLink,
+  hero_image_url: String(body.heroImage ?? defaultStoreSettings.heroImage).trim() || defaultStoreSettings.heroImage,
 });
 
 export const getAdminSettings = asyncHandler(async (req, res) => {
@@ -178,7 +260,7 @@ export const updateAdminSettings = asyncHandler(async (req, res) => {
     }
     if (isMissingColumnError(error.message)) {
       res.status(400);
-      throw new Error("Run the latest schema SQL to add support email and store address settings");
+      throw new Error("Run the latest schema SQL to add latest storefront settings fields");
     }
 
     res.status(500);
@@ -186,6 +268,63 @@ export const updateAdminSettings = asyncHandler(async (req, res) => {
   }
 
   return res.json(mapStoreSettings(data));
+});
+
+export const uploadAdminHeroImage = asyncHandler(async (req, res) => {
+  if (!req.file) {
+    res.status(400);
+    throw new Error("Hero image file is required");
+  }
+
+  await ensureStorefrontAssetsBucket();
+
+  const extension = req.file.originalname.includes(".")
+    ? req.file.originalname.slice(req.file.originalname.lastIndexOf(".")).toLowerCase()
+    : ".jpg";
+  const filePath = `hero/${Date.now()}-${Math.random().toString(36).slice(2)}${extension}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(STOREFRONT_ASSETS_BUCKET)
+    .upload(filePath, req.file.buffer, {
+      contentType: req.file.mimetype,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    res.status(500);
+    if (isPermissionError(uploadError.message)) {
+      throw new Error(
+        "Hero image upload failed due to storage permissions. Verify SUPABASE_SERVICE_ROLE_KEY and bucket policies."
+      );
+    }
+    throw new Error(uploadError.message);
+  }
+
+  const {
+    data: { publicUrl },
+  } = supabase.storage.from(STOREFRONT_ASSETS_BUCKET).getPublicUrl(filePath);
+
+  const payload = buildStoreSettingsPayload({
+    ...defaultStoreSettings,
+    heroImage: publicUrl,
+  });
+
+  const { data, error } = await supabase
+    .from("store_settings")
+    .upsert(payload, { onConflict: "id" })
+    .select(settingsSelect)
+    .single();
+
+  if (error) {
+    res.status(500);
+    throw new Error(error.message);
+  }
+
+  return res.json({
+    message: "Hero image uploaded successfully",
+    heroImage: publicUrl,
+    settings: mapStoreSettings(data),
+  });
 });
 
 export const getAdminDashboardStats = asyncHandler(async (req, res) => {
@@ -196,7 +335,7 @@ export const getAdminDashboardStats = asyncHandler(async (req, res) => {
       supabase.from("users").select("id", { count: "exact", head: true }),
       supabase.from("orders").select(orderSelect).order("created_at", { ascending: false }).limit(5),
       supabase.from("products").select(productSelect).lte("stock", 10).order("stock", { ascending: true }).limit(8),
-      supabase.from("orders").select("total_amount, payment_status, order_status"),
+      supabase.from("orders").select("total_amount, payment_status, order_status, created_at"),
     ]);
 
   const errors = [
@@ -217,6 +356,38 @@ export const getAdminDashboardStats = asyncHandler(async (req, res) => {
     .filter((item) => item.order_status !== "cancelled" && item.payment_status !== "failed")
     .reduce((sum, item) => sum + Number(item.total_amount || 0), 0);
 
+  const monthFormatter = new Intl.DateTimeFormat("en-US", { month: "short" });
+  const now = new Date();
+  const monthlyTemplate = Array.from({ length: 6 }).map((_, index) => {
+    const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+    return {
+      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+      month: monthFormatter.format(date),
+      revenue: 0,
+    };
+  });
+
+  const monthlyMap = new Map(monthlyTemplate.map((entry) => [entry.key, entry]));
+
+  (revenueOrdersRes.data || [])
+    .filter((item) => item.order_status !== "cancelled" && item.payment_status !== "failed")
+    .forEach((item) => {
+      if (!item.created_at) return;
+      const createdAt = new Date(item.created_at);
+      if (Number.isNaN(createdAt.getTime())) return;
+
+      const key = `${createdAt.getFullYear()}-${String(createdAt.getMonth() + 1).padStart(2, "0")}`;
+      const bucket = monthlyMap.get(key);
+      if (!bucket) return;
+
+      bucket.revenue += Number(item.total_amount || 0);
+    });
+
+  const monthlyRevenue = monthlyTemplate.map((entry) => ({
+    month: entry.month,
+    revenue: Number(entry.revenue.toFixed(2)),
+  }));
+
   res.json({
     totals: {
       products: productsCount.count || 0,
@@ -224,17 +395,20 @@ export const getAdminDashboardStats = asyncHandler(async (req, res) => {
       users: usersCount.count || 0,
       revenue: totalRevenue,
     },
+    monthlyRevenue,
     recentOrders: (recentOrdersRes.data || []).map((row) => mapOrder(row, { includeUser: true })),
     lowStockProducts: (lowStockRes.data || []).map(mapProduct),
   });
 });
 
 export const getAllOrdersAdmin = asyncHandler(async (req, res) => {
-  const { paymentStatus, orderStatus, q } = req.query;
+  const { paymentStatus, orderStatus, q, fromDate, toDate } = req.query;
   let queryBuilder = supabase.from("orders").select(orderSelect).order("created_at", { ascending: false });
 
   if (paymentStatus) queryBuilder = queryBuilder.eq("payment_status", paymentStatus);
   if (orderStatus) queryBuilder = queryBuilder.eq("order_status", orderStatus);
+  if (fromDate) queryBuilder = queryBuilder.gte("created_at", `${fromDate}T00:00:00.000Z`);
+  if (toDate) queryBuilder = queryBuilder.lte("created_at", `${toDate}T23:59:59.999Z`);
 
   const { data, error } = await queryBuilder;
   if (error) {
@@ -242,7 +416,8 @@ export const getAllOrdersAdmin = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 
-  let orders = (data || []).map((row) => mapOrder(row, { includeUser: true }));
+  const normalizedRows = await autoDeliverIfDue(data || []);
+  let orders = normalizedRows.map((row) => mapOrder(row, { includeUser: true }));
 
   if (q) {
     const lowered = q.toLowerCase();
@@ -257,16 +432,65 @@ export const getAllOrdersAdmin = asyncHandler(async (req, res) => {
   res.json(orders);
 });
 
+export const getAdminOrderById = asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from("orders")
+    .select(orderSelect)
+    .eq("id", req.params.id)
+    .maybeSingle();
+
+  if (error) {
+    res.status(500);
+    throw new Error(error.message);
+  }
+
+  if (!data) {
+    res.status(404);
+    throw new Error("Order not found");
+  }
+
+  const [normalized] = await autoDeliverIfDue([data]);
+  return res.json(mapOrder(normalized, { includeUser: true }));
+});
+
 export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
-  const { orderStatus, paymentStatus } = req.body;
+  const {
+    orderStatus,
+    paymentStatus,
+    trackingNumber,
+    courierName,
+    adminNote,
+    statusNote,
+  } = req.body;
 
   const payload = {};
   if (orderStatus) payload.order_status = orderStatus;
   if (paymentStatus) payload.payment_status = paymentStatus;
+  if (trackingNumber !== undefined) payload.tracking_number = String(trackingNumber || "").trim() || null;
+  if (courierName !== undefined) payload.courier_name = String(courierName || "").trim() || null;
+  if (adminNote !== undefined) payload.admin_note = String(adminNote || "").trim() || null;
+
+  const nowIso = new Date().toISOString();
+  if (trackingNumber !== undefined && String(trackingNumber || "").trim()) {
+    payload.tracking_added_at = nowIso;
+  }
+
+  if (orderStatus) {
+    Object.assign(payload, buildOrderLifecycleTimestamps(orderStatus, nowIso));
+  }
+
+  if (paymentStatus === "paid") {
+    const { data: totalRow } = await supabase
+      .from("orders")
+      .select("total_amount")
+      .eq("id", req.params.id)
+      .maybeSingle();
+    payload.paid_amount = Number(totalRow?.total_amount || 0);
+  }
 
   const { data: existing, error: existingError } = await supabase
     .from("orders")
-    .select("id")
+    .select("id, order_status")
     .eq("id", req.params.id)
     .maybeSingle();
 
@@ -288,6 +512,15 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
   if (updateError) {
     res.status(500);
     throw new Error(updateError.message);
+  }
+
+  if (orderStatus && existing.order_status !== orderStatus) {
+    await addOrderStatusHistory({
+      orderId: req.params.id,
+      status: orderStatus,
+      note: String(statusNote || "").trim() || `Status updated to ${orderStatus}`,
+      changedBy: req.user?.id || req.user?._id || null,
+    });
   }
 
   const { data: updatedOrder, error: loadError } = await supabase
@@ -554,15 +787,69 @@ export const getAdminProfitReport = asyncHandler(async (req, res) => {
 
   const orders = (data || []).map((row) => mapOrder(row, { includeUser: true }));
 
-  const summary = orders.reduce(
+  const reportableOrders = orders.filter(
+    (order) => order.orderStatus !== "cancelled" && order.paymentStatus !== "failed"
+  );
+
+  const normalizeItemMetrics = (item = {}) => {
+    const quantity = Number(item.quantity || 0);
+    const unitPrice = orderNumber(item.price);
+    const discountAmount = orderNumber(item.discountAmount);
+    const shippingPrice = orderNumber(item.shippingPrice);
+    const productCost = orderNumber(item.productCost);
+
+    const lineSubtotal = orderNumber(item.lineSubtotal) || unitPrice * quantity;
+    const lineShippingTotal = orderNumber(item.lineShippingTotal) || shippingPrice * quantity;
+    const lineDiscountTotal = orderNumber(item.lineDiscountTotal) || discountAmount * quantity;
+    const lineProductCostTotal = orderNumber(item.lineProductCostTotal) || productCost * quantity;
+    const lineTotal = orderNumber(item.lineTotal) || lineSubtotal + lineShippingTotal;
+    const lineProfitTotal =
+      orderNumber(item.lineProfitTotal) ||
+      lineSubtotal - (lineProductCostTotal + lineShippingTotal + lineDiscountTotal);
+
+    return {
+      quantity,
+      lineSubtotal,
+      lineShippingTotal,
+      lineDiscountTotal,
+      lineProductCostTotal,
+      lineTotal,
+      lineProfitTotal,
+    };
+  };
+
+  const normalizeOrderMetrics = (order = {}) => {
+    const items = Array.isArray(order.items) ? order.items : [];
+    const normalizedItems = items.map(normalizeItemMetrics);
+
+    const itemsSubtotal = normalizedItems.reduce((sum, item) => sum + item.lineSubtotal, 0);
+    const itemsShipping = normalizedItems.reduce((sum, item) => sum + item.lineShippingTotal, 0);
+    const itemsDiscount = normalizedItems.reduce((sum, item) => sum + item.lineDiscountTotal, 0);
+    const itemsProductCost = normalizedItems.reduce((sum, item) => sum + item.lineProductCostTotal, 0);
+    const itemsProfit = normalizedItems.reduce((sum, item) => sum + item.lineProfitTotal, 0);
+
+    const subtotal = orderNumber(order.subtotalAmount) || itemsSubtotal;
+    const shipping = orderNumber(order.shippingTotal) || itemsShipping;
+    const discount = orderNumber(order.discountTotal) || itemsDiscount;
+    const productCost = orderNumber(order.productCostTotal) || itemsProductCost;
+    const total = orderNumber(order.totalAmount) || subtotal + shipping;
+    const profit = orderNumber(order.profitTotal) || subtotal - (productCost + shipping + discount);
+
+    return {
+      items,
+      normalizedItems,
+      subtotal,
+      shipping,
+      discount,
+      productCost,
+      total,
+      profit,
+    };
+  };
+
+  const summary = reportableOrders.reduce(
     (acc, order) => {
-      const items = Array.isArray(order.items) ? order.items : [];
-      const subtotal = orderNumber(order.subtotalAmount) || items.reduce((sum, item) => sum + orderNumber(item.lineSubtotal), 0);
-      const shipping = orderNumber(order.shippingTotal) || items.reduce((sum, item) => sum + orderNumber(item.lineShippingTotal), 0);
-      const discount = orderNumber(order.discountTotal) || items.reduce((sum, item) => sum + orderNumber(item.lineDiscountTotal), 0);
-      const productCost = orderNumber(order.productCostTotal) || items.reduce((sum, item) => sum + orderNumber(item.lineProductCostTotal), 0);
-      const profit = orderNumber(order.profitTotal) || items.reduce((sum, item) => sum + orderNumber(item.lineProfitTotal), 0);
-      const total = orderNumber(order.totalAmount) || subtotal + shipping;
+      const { items, subtotal, shipping, discount, productCost, profit, total } = normalizeOrderMetrics(order);
 
       acc.totalSales += total;
       acc.totalShippingCollected += shipping;
@@ -586,9 +873,12 @@ export const getAdminProfitReport = asyncHandler(async (req, res) => {
 
   const soldProductsMap = new Map();
   const trendMap = new Map();
+  const orderTrendMap = new Map();
 
-  for (const order of orders) {
+  for (const order of reportableOrders) {
     const dayKey = String(order.createdAt || "").slice(0, 10);
+    const { normalizedItems, total, profit } = normalizeOrderMetrics(order);
+
     if (!trendMap.has(dayKey)) {
       trendMap.set(dayKey, {
         date: dayKey,
@@ -597,12 +887,25 @@ export const getAdminProfitReport = asyncHandler(async (req, res) => {
         orders: 0,
       });
     }
+
+    if (!orderTrendMap.has(dayKey)) {
+      orderTrendMap.set(dayKey, {
+        date: dayKey,
+        orders: 0,
+      });
+    }
+
     const trendEntry = trendMap.get(dayKey);
-    trendEntry.sales += orderNumber(order.totalAmount);
-    trendEntry.profit += orderNumber(order.profitTotal);
+    trendEntry.sales += total;
+    trendEntry.profit += profit;
     trendEntry.orders += 1;
 
-    for (const item of order.items || []) {
+    const orderTrendEntry = orderTrendMap.get(dayKey);
+    orderTrendEntry.orders += 1;
+
+    for (let index = 0; index < (order.items || []).length; index += 1) {
+      const item = order.items[index] || {};
+      const normalizedItem = normalizedItems[index] || normalizeItemMetrics(item);
       const key = `${item.productId || "unknown"}:${item.name || "Unknown"}`;
       if (!soldProductsMap.has(key)) {
         soldProductsMap.set(key, {
@@ -617,17 +920,18 @@ export const getAdminProfitReport = asyncHandler(async (req, res) => {
         });
       }
       const entry = soldProductsMap.get(key);
-      entry.quantitySold += Number(item.quantity || 0);
-      entry.sales += orderNumber(item.lineTotal);
-      entry.shipping += orderNumber(item.lineShippingTotal);
-      entry.discount += orderNumber(item.lineDiscountTotal);
-      entry.productCost += orderNumber(item.lineProductCostTotal);
-      entry.profit += orderNumber(item.lineProfitTotal);
+      entry.quantitySold += normalizedItem.quantity;
+      entry.sales += normalizedItem.lineTotal;
+      entry.shipping += normalizedItem.lineShippingTotal;
+      entry.discount += normalizedItem.lineDiscountTotal;
+      entry.productCost += normalizedItem.lineProductCostTotal;
+      entry.profit += normalizedItem.lineProfitTotal;
     }
   }
 
   const soldProducts = [...soldProductsMap.values()].sort((a, b) => b.profit - a.profit);
   const trend = [...trendMap.values()].sort((a, b) => a.date.localeCompare(b.date));
+  const orderTrend = [...orderTrendMap.values()].sort((a, b) => a.date.localeCompare(b.date));
 
   res.json({
     period,
@@ -636,8 +940,9 @@ export const getAdminProfitReport = asyncHandler(async (req, res) => {
       to: range.to.toISOString(),
     },
     summary,
-    orders,
+    orders: reportableOrders,
     soldProducts,
     trend,
+    orderTrend,
   });
 });

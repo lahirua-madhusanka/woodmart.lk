@@ -1,10 +1,10 @@
 {
-  "name": "new-project",
+  "name": "woodmart",
   "version": "1.0.0",
   "description": "Premium React ecommerce storefront",
   "private": true,
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "server": "npm run dev --prefix server",
     "dev:full": "concurrently \"npm run server\" \"npm run dev\"",
     "build": "vite build",

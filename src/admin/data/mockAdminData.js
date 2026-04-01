@@ -44,7 +44,7 @@ export const mockCoupons = [
 
 export const mockSettings = {
   storeName: "Woodmart.lk",
-  supportEmail: "support@atelieroak.com",
+  supportEmail: "support@woodmart.lk",
   contactNumber: "+1 (212) 555-0193",
   storeAddress: "224 Artisan Street, New York",
   currency: "Rs.",

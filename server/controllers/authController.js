@@ -1,58 +1,61 @@
 import asyncHandler from "express-async-handler";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
 import env from "../config/env.js";
 import supabase from "../config/supabase.js";
-import supabaseAuth from "../config/supabaseAuth.js";
 import { mapProduct, mapUser } from "../utils/dbMappers.js";
+import { sendVerificationEmail } from "../utils/email.js";
 
 const signToken = (id) => jwt.sign({ id }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
-
-const getVerificationRedirectUrl = () => `${env.clientUrl}/auth/verify-email`;
+const EMAIL_VERIFICATION_TTL_HOURS = 24;
+const RESEND_COOLDOWN_MS = 60 * 1000;
+const resendGuard = new Map();
 
 const getDefaultNameFromEmail = (email) => {
   const [namePart] = String(email || "").split("@");
   return namePart || "User";
 };
 
-const syncUserRecord = async ({ id, name, email, role = "user", emailVerified = false, passwordHash }) => {
-  const fallbackName = name || getDefaultNameFromEmail(email);
+const hashVerificationToken = (token) =>
+  crypto.createHash("sha256").update(String(token)).digest("hex");
 
-  const { data: existingByEmail, error: existingByEmailError } = await supabase
-    .from("users")
-    .select("id, role, password_hash")
-    .eq("email", email)
-    .maybeSingle();
-
-  if (existingByEmailError) {
-    throw new Error(existingByEmailError.message || "Failed to query existing user profile");
-  }
-
-  const targetId = existingByEmail?.id || id;
-
-  const payload = {
-    id: targetId,
-    name: fallbackName,
-    email,
-    role: existingByEmail?.role || role,
-    password_hash: passwordHash || existingByEmail?.password_hash || "SUPABASE_AUTH_MANAGED",
-    email_verified: Boolean(emailVerified),
-    email_verified_at: emailVerified ? new Date().toISOString() : null,
-    email_verification_token_hash: null,
-    email_verification_expires_at: null,
+const createVerificationToken = () => {
+  const token = crypto.randomBytes(32).toString("hex");
+  const tokenHash = hashVerificationToken(token);
+  const expiresAt = new Date(Date.now() + EMAIL_VERIFICATION_TTL_HOURS * 60 * 60 * 1000).toISOString();
+  return {
+    token,
+    tokenHash,
+    expiresAt,
   };
+};
 
-  const { data, error } = await supabase
+const buildVerificationUrl = (token) =>
+  `${env.clientUrl}/auth/verify-email?token=${encodeURIComponent(token)}`;
+
+const persistVerificationToken = async ({ userId, tokenHash, expiresAt }) => {
+  const { error } = await supabase
     .from("users")
-    .upsert(payload, { onConflict: "id" })
-    .select("id, name, email, role, email_verified, email_verified_at, created_at, updated_at")
-    .single();
+    .update({
+      email_verification_token_hash: tokenHash,
+      email_verification_expires_at: expiresAt,
+    })
+    .eq("id", userId);
 
-  if (error || !data) {
-    throw new Error(error?.message || "Failed to sync user profile");
+  if (error) {
+    throw new Error(error.message || "Failed to persist verification token");
   }
+};
 
-  return data;
+const sendVerificationToUser = async ({ userId, email, name }) => {
+  const { token, tokenHash, expiresAt } = createVerificationToken();
+  await persistVerificationToken({ userId, tokenHash, expiresAt });
+  await sendVerificationEmail({
+    toEmail: email,
+    name,
+    verificationUrl: buildVerificationUrl(token),
+  });
 };
 
 const setAuthCookie = (res, token) => {
@@ -96,48 +99,45 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
 
   const userName = name || username;
-  const { data: authData, error: signupError } = await supabaseAuth.auth.signUp({
-    email: normalizedEmail,
-    password,
-    options: {
-      data: { name: userName },
-      emailRedirectTo: getVerificationRedirectUrl(),
-    },
-  });
+  const passwordHash = await bcrypt.hash(password, 10);
 
-  if (signupError) {
-    const message = String(signupError.message || "");
-    if (message.toLowerCase().includes("already") || message.toLowerCase().includes("registered")) {
-      res.status(409);
-      throw new Error("Email already registered");
-    }
-    if (message.toLowerCase().includes("confirmation email")) {
-      res.status(500);
-      throw new Error("Signup failed because Supabase confirmation email could not be sent. Check Supabase Auth email provider settings.");
-    }
-    res.status(400);
-    throw new Error(message || "Failed to register user");
-  }
+  const { data: createdUser, error: createError } = await supabase
+    .from("users")
+    .insert({
+      name: userName || getDefaultNameFromEmail(normalizedEmail),
+      email: normalizedEmail,
+      password_hash: passwordHash,
+      role: "user",
+      email_verified: false,
+      email_verified_at: null,
+    })
+    .select("id, name, email, role, email_verified, email_verified_at, created_at, updated_at")
+    .single();
 
-  const authUser = authData?.user;
-  if (!authUser) {
+  if (createError || !createdUser) {
     res.status(500);
-    throw new Error("Supabase did not return a user for signup");
+    throw new Error(createError?.message || "Failed to register user");
   }
 
-  const synced = await syncUserRecord({
-    id: authUser.id,
-    name: userName,
-    email: normalizedEmail,
-    role: "user",
-    emailVerified: Boolean(authUser.email_confirmed_at),
-  });
+  let emailSent = true;
+  try {
+    await sendVerificationToUser({
+      userId: createdUser.id,
+      email: createdUser.email,
+      name: createdUser.name,
+    });
+  } catch (error) {
+    emailSent = false;
+  }
 
   res.status(201).json({
-    message: "Account created. Check your email and click the confirmation link to verify your account.",
+    message: emailSent
+      ? "Account created. Check your email and click the verification link to verify your account."
+      : "Account created, but verification email could not be sent. Please request a new verification email.",
     requiresVerification: true,
+    emailSent,
     email: normalizedEmail,
-    user: mapUser(synced),
+    user: mapUser(createdUser),
   });
 });
 
@@ -162,75 +162,33 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new Error(localUserError.message);
   }
 
-  if (localUser?.role === "admin") {
-    const validPassword = await bcrypt.compare(password, localUser.password_hash);
-    if (!validPassword) {
-      res.status(401);
-      throw new Error("Invalid email or password");
-    }
-
-    const token = signToken(localUser.id);
-    setAuthCookie(res, token);
-
-    return res.json({ token, user: mapUser(localUser) });
-  }
-
-  const { data: authSessionData, error: signInError } = await supabaseAuth.auth.signInWithPassword({
-    email: normalizedEmail,
-    password,
-  });
-
-  if (signInError) {
-    const message = String(signInError.message || "").toLowerCase();
-    if (message.includes("email not confirmed") || message.includes("not confirmed")) {
-      res.status(403);
-      throw new Error("Please verify your email before logging in");
-    }
-    if (message.includes("invalid") || message.includes("credentials")) {
-      res.status(401);
-      throw new Error("Invalid email or password");
-    }
-    res.status(500);
-    throw new Error(signInError.message || "Login failed");
-  }
-
-  const authUser = authSessionData?.user;
-  if (!authUser) {
+  if (!localUser) {
     res.status(401);
     throw new Error("Invalid email or password");
   }
 
-  if (!authUser.email_confirmed_at) {
+  if (!localUser.password_hash || localUser.password_hash === "SUPABASE_AUTH_MANAGED") {
+    res.status(400);
+    throw new Error("This account is not eligible for password login. Please reset your password.");
+  }
+
+  const validPassword = await bcrypt.compare(password, localUser.password_hash);
+  if (!validPassword) {
+    res.status(401);
+    throw new Error("Invalid email or password");
+  }
+
+  if (!localUser.email_verified) {
     res.status(403);
     throw new Error("Please verify your email before logging in");
   }
 
-  const syncedUser = await syncUserRecord({
-    id: authUser.id,
-    name: authUser.user_metadata?.name || authUser.user_metadata?.full_name || localUser?.name,
-    email: normalizedEmail,
-    role: localUser?.role || "user",
-    emailVerified: true,
-    passwordHash: localUser?.password_hash,
-  });
-
-  const { data: appUser, error: appUserError } = await supabase
-    .from("users")
-    .select("id, name, email, role, email_verified, email_verified_at, created_at, updated_at")
-    .eq("id", syncedUser.id)
-    .single();
-
-  if (appUserError || !appUser) {
-    res.status(500);
-    throw new Error(appUserError?.message || "User profile sync failed");
-  }
-
-  const token = signToken(appUser.id);
+  const token = signToken(localUser.id);
   setAuthCookie(res, token);
 
   res.json({
     token,
-    user: mapUser(appUser),
+    user: mapUser(localUser),
   });
 });
 
@@ -398,7 +356,7 @@ export const changePassword = asyncHandler(async (req, res) => {
 
   const { data: user, error: userError } = await supabase
     .from("users")
-    .select("id, email, role, password_hash")
+    .select("id, password_hash")
     .eq("id", req.user._id)
     .single();
 
@@ -407,75 +365,77 @@ export const changePassword = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
 
-  if (user.role === "admin") {
-    const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
-    if (!validPassword) {
-      res.status(400);
-      throw new Error("Current password is incorrect");
-    }
+  if (!user.password_hash || user.password_hash === "SUPABASE_AUTH_MANAGED") {
+    res.status(400);
+    throw new Error("Password change is not available for this account");
+  }
 
-    const passwordHash = await bcrypt.hash(newPassword, 10);
-    const { error: updateError } = await supabase
-      .from("users")
-      .update({ password_hash: passwordHash })
-      .eq("id", req.user._id);
+  const validPassword = await bcrypt.compare(currentPassword, user.password_hash);
+  if (!validPassword) {
+    res.status(400);
+    throw new Error("Current password is incorrect");
+  }
 
-    if (updateError) {
-      res.status(500);
-      throw new Error(updateError.message);
-    }
-  } else {
-    const { error: verifyCurrentPasswordError } = await supabaseAuth.auth.signInWithPassword({
-      email: user.email,
-      password: currentPassword,
-    });
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({ password_hash: passwordHash })
+    .eq("id", req.user._id);
 
-    if (verifyCurrentPasswordError) {
-      res.status(400);
-      throw new Error("Current password is incorrect");
-    }
-
-    const { error: authUpdateError } = await supabase.auth.admin.updateUserById(req.user._id, {
-      password: newPassword,
-    });
-
-    if (authUpdateError) {
-      res.status(500);
-      throw new Error(authUpdateError.message);
-    }
+  if (updateError) {
+    res.status(500);
+    throw new Error(updateError.message);
   }
 
   res.json({ message: "Password updated successfully" });
 });
 
 export const verifyEmail = asyncHandler(async (req, res) => {
-  const tokenHash = String(req.query.token_hash || req.body?.tokenHash || req.body?.token_hash || "").trim();
-  const type = String(req.query.type || req.body?.type || "signup").trim();
-  const email = String(req.query.email || req.body?.email || "").trim().toLowerCase();
+  const token = String(req.query.token || req.body?.token || "").trim();
 
-  if (!tokenHash) {
+  if (!token) {
     res.status(400);
     throw new Error("Invalid verification link");
   }
 
-  const payload = { token_hash: tokenHash, type };
+  const tokenHash = hashVerificationToken(token);
+  const { data: user, error } = await supabase
+    .from("users")
+    .select("id, email_verified, email_verification_expires_at")
+    .eq("email_verification_token_hash", tokenHash)
+    .maybeSingle();
 
-  const { data: verifyData, error: verifyError } = await supabaseAuth.auth.verifyOtp(payload);
-
-  if (verifyError) {
-    res.status(400);
-    throw new Error(verifyError.message || "Verification link is invalid or expired");
+  if (error) {
+    res.status(500);
+    throw new Error(error.message);
   }
 
-  const verifiedUser = verifyData?.user;
-  if (verifiedUser) {
-    await syncUserRecord({
-      id: verifiedUser.id,
-      name: verifiedUser.user_metadata?.name || verifiedUser.user_metadata?.full_name,
-      email: verifiedUser.email,
-      role: "user",
-      emailVerified: true,
-    });
+  if (!user) {
+    res.status(400);
+    throw new Error("Verification link is invalid or expired");
+  }
+
+  const expiresAt = user.email_verification_expires_at ? new Date(user.email_verification_expires_at) : null;
+  if (!expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+    res.status(400);
+    throw new Error("Verification link is invalid or expired");
+  }
+
+  if (!user.email_verified) {
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({
+        email_verified: true,
+        email_verified_at: new Date().toISOString(),
+        email_verification_token_hash: null,
+        email_verification_expires_at: null,
+      })
+      .eq("id", user.id);
+
+    if (updateError) {
+      res.status(500);
+      throw new Error(updateError.message);
+    }
   }
 
   res.json({ message: "Email verified successfully" });
@@ -489,26 +449,37 @@ export const resendVerificationEmail = asyncHandler(async (req, res) => {
     throw new Error("Email is required");
   }
 
-  const { error } = await supabaseAuth.auth.resend({
-    type: "signup",
-    email: normalizedEmail,
-    options: {
-      emailRedirectTo: getVerificationRedirectUrl(),
-    },
-  });
-
-  if (error) {
-    const message = String(error.message || "").toLowerCase();
-    if (message.includes("confirmed") || message.includes("already")) {
-      return res.json({ message: "Email is already verified" });
-    }
-    if (message.includes("confirmation email")) {
-      res.status(500);
-      throw new Error("Could not send verification email from Supabase. Check Supabase Auth email provider settings.");
-    }
-    res.status(400);
-    throw new Error(error.message || "Could not resend verification email");
+  const lastSentAt = resendGuard.get(normalizedEmail);
+  if (lastSentAt && Date.now() - lastSentAt < RESEND_COOLDOWN_MS) {
+    res.status(429);
+    throw new Error("Please wait before requesting another verification email");
   }
+
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("id, name, email, email_verified")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+
+  if (userError) {
+    res.status(500);
+    throw new Error(userError.message);
+  }
+
+  if (!user) {
+    return res.json({ message: "If this email is registered, a verification link has been sent." });
+  }
+
+  if (user.email_verified) {
+    return res.json({ message: "Email is already verified" });
+  }
+
+  await sendVerificationToUser({
+    userId: user.id,
+    email: user.email,
+    name: user.name,
+  });
+  resendGuard.set(normalizedEmail, Date.now());
 
   res.json({ message: "Verification email sent. Please check your inbox." });
 });

@@ -31,9 +31,9 @@ export const logoutApi = async () => {
 };
 
 export const verifyEmailApi = async (params) => {
-  const { tokenHash, type } = params;
+  const { token } = params;
   const { data } = await apiClient.get("/auth/verify-email", {
-    params: { token_hash: tokenHash, type },
+    params: { token },
   });
   return data;
 };

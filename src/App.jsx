@@ -17,6 +17,7 @@ const OrderConfirmationPage = lazy(() => import("./pages/OrderConfirmationPage")
 const AboutPage = lazy(() => import("./pages/AboutPage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
 const CustomProjectPage = lazy(() => import("./pages/CustomProjectPage"));
+const MyCustomRequestsPage = lazy(() => import("./pages/MyCustomRequestsPage"));
 const AuthPage = lazy(() => import("./pages/AuthPage"));
 const CheckEmailPage = lazy(() => import("./pages/CheckEmailPage"));
 const VerifyEmailPage = lazy(() => import("./pages/VerifyEmailPage"));
@@ -36,6 +37,7 @@ const AdminReviewsPage = lazy(() => import("./admin/pages/ReviewsPage"));
 const AdminMessagesPage = lazy(() => import("./admin/pages/MessagesPage"));
 const AdminBannersPage = lazy(() => import("./admin/pages/BannersPage"));
 const AdminCouponsPage = lazy(() => import("./admin/pages/CouponsPage"));
+const AdminCustomRequestsPage = lazy(() => import("./admin/pages/CustomRequestsPage"));
 const AdminSettingsPage = lazy(() => import("./admin/pages/SettingsPage"));
 
 const withSuspense = (node, label) => (
@@ -65,6 +67,7 @@ function App() {
         <Route path="categories" element={withSuspense(<AdminCategoriesPage />, "Loading categories...")} />
         <Route path="reviews" element={withSuspense(<AdminReviewsPage />, "Loading reviews...")} />
         <Route path="messages" element={withSuspense(<AdminMessagesPage />, "Loading messages...")} />
+        <Route path="custom-requests" element={withSuspense(<AdminCustomRequestsPage />, "Loading custom requests...")} />
         <Route path="banners" element={withSuspense(<AdminBannersPage />, "Loading banners...")} />
         <Route path="coupons" element={withSuspense(<AdminCouponsPage />, "Loading coupons...")} />
         <Route path="settings" element={withSuspense(<AdminSettingsPage />, "Loading settings...")} />
@@ -126,6 +129,14 @@ function App() {
         <Route path="about" element={withSuspense(<AboutPage />, "Loading about...")} />
         <Route path="contact" element={withSuspense(<ContactPage />, "Loading contact...")} />
         <Route path="custom-project" element={withSuspense(<CustomProjectPage />, "Loading custom project...")} />
+        <Route
+          path="my-requests"
+          element={
+            <PrivateRoute>
+              {withSuspense(<MyCustomRequestsPage />, "Loading my requests...")}
+            </PrivateRoute>
+          }
+        />
         <Route path="auth" element={withSuspense(<AuthPage />, "Loading account...")} />
         <Route path="auth/check-email" element={withSuspense(<CheckEmailPage />, "Loading verification details...")} />
         <Route path="auth/verify-email" element={withSuspense(<VerifyEmailPage />, "Verifying email...")} />

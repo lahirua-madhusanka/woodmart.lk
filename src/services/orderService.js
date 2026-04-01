@@ -10,6 +10,11 @@ export const createOrderApi = async (payload) => {
   return data;
 };
 
+export const applyCouponApi = async (code) => {
+  const { data } = await apiClient.post("/coupons/apply", { code });
+  return data;
+};
+
 export const getUserOrdersApi = async () => {
   const { data } = await apiClient.get("/orders/user");
   return data;

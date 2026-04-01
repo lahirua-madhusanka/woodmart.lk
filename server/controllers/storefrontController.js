@@ -11,6 +11,15 @@ const defaultStoreSettings = {
   currency: "Rs.",
   freeShippingThreshold: 199,
   themeAccent: "#0959a4",
+  heroTitle: "Craft your space with timeless pieces.",
+  heroSubtitle:
+    "Discover premium furniture, decor, and lifestyle objects inspired by natural materials and modern living.",
+  heroPrimaryButtonText: "Shop Now",
+  heroPrimaryButtonLink: "/shop",
+  heroSecondaryButtonText: "View Collection",
+  heroSecondaryButtonLink: "/shop",
+  heroImage:
+    "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80",
 };
 
 const isMissingRelationError = (message = "") => {
@@ -28,6 +37,17 @@ const mapStoreSettings = (row = {}) => ({
     row.free_shipping_threshold ?? defaultStoreSettings.freeShippingThreshold
   ),
   themeAccent: row.theme_accent ?? defaultStoreSettings.themeAccent,
+  heroTitle: row.hero_title ?? defaultStoreSettings.heroTitle,
+  heroSubtitle: row.hero_subtitle ?? defaultStoreSettings.heroSubtitle,
+  heroPrimaryButtonText:
+    row.hero_primary_button_text ?? defaultStoreSettings.heroPrimaryButtonText,
+  heroPrimaryButtonLink:
+    row.hero_primary_button_link ?? defaultStoreSettings.heroPrimaryButtonLink,
+  heroSecondaryButtonText:
+    row.hero_secondary_button_text ?? defaultStoreSettings.heroSecondaryButtonText,
+  heroSecondaryButtonLink:
+    row.hero_secondary_button_link ?? defaultStoreSettings.heroSecondaryButtonLink,
+  heroImage: row.hero_image_url ?? defaultStoreSettings.heroImage,
 });
 
 export const getStorefrontSettings = asyncHandler(async (req, res) => {

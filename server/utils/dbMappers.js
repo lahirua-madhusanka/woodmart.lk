@@ -20,8 +20,11 @@ export const mapProduct = (row) => {
     _id: review.id,
     user: review.user_id,
     name: review.name,
+    title: review.title || "",
     rating: Number(review.rating || 0),
     comment: review.comment,
+    orderId: review.order_id || null,
+    verifiedPurchase: Boolean(review.order_id),
     createdAt: review.created_at,
     updatedAt: review.updated_at,
   }));
@@ -61,6 +64,7 @@ export const mapOrder = (row, options = {}) => {
     productId: item.product_id,
     name: item.name,
     image: item.image,
+    sku: item.sku || "",
     price: Number(item.price || 0),
     listPrice: Number(item.list_price ?? item.price ?? 0),
     discountAmount: Number(item.discount_amount || 0),
@@ -98,6 +102,18 @@ export const mapOrder = (row, options = {}) => {
     paymentStatus: row.payment_status,
     orderStatus: row.order_status,
     paymentMethod: row.payment_method || "cod",
+    transactionId: row.transaction_id || "",
+    paidAmount: Number(row.paid_amount || 0),
+    trackingNumber: row.tracking_number || "",
+    courierName: row.courier_name || "",
+    adminNote: row.admin_note || "",
+    shippedAt: row.shipped_at || null,
+    outForDeliveryAt: row.out_for_delivery_at || null,
+    deliveredAt: row.delivered_at || null,
+    returnedAt: row.returned_at || null,
+    cancelledAt: row.cancelled_at || null,
+    trackingAddedAt: row.tracking_added_at || null,
+    invoiceNumber: row.invoice_number || "",
     shippingAddress: shipping
       ? {
           fullName: shipping.full_name,
@@ -113,6 +129,28 @@ export const mapOrder = (row, options = {}) => {
     paymentIntentId: row.payment_intent_id || "",
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    couponId: row.coupon_id || null,
+    couponCode: row.coupon_code || null,
+    couponTitle: row.coupon_title || null,
+    couponDiscountType: row.coupon_discount_type || null,
+    couponDiscountValue: row.coupon_discount_value == null ? null : Number(row.coupon_discount_value),
+    couponDiscountAmount: Number(row.coupon_discount_amount || 0),
+    statusHistory: (row.order_status_history || [])
+      .slice()
+      .sort((a, b) => new Date(b.changed_at).getTime() - new Date(a.changed_at).getTime())
+      .map((entry) => ({
+        id: entry.id,
+        status: entry.order_status,
+        note: entry.note || "",
+        changedAt: entry.changed_at,
+        changedBy: entry.changed_by || null,
+        changedByUser: entry.users
+          ? {
+              name: entry.users.name || "",
+              email: entry.users.email || "",
+            }
+          : null,
+      })),
   };
 
   if (includeUser) {

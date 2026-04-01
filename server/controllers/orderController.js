@@ -2,12 +2,14 @@ import asyncHandler from "express-async-handler";
 import Stripe from "stripe";
 import env from "../config/env.js";
 import supabase from "../config/supabase.js";
+import { recordCouponUsageForOrder, validateCouponForCart } from "../services/couponEngine.js";
+import { addOrderStatusHistory, autoDeliverIfDue } from "../services/orderWorkflow.js";
 import { mapOrder } from "../utils/dbMappers.js";
 
 const stripe = env.stripeSecretKey ? new Stripe(env.stripeSecretKey) : null;
 
 const orderSelect =
-  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone)";
+  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
 
 const mapAddressRow = (row) => ({
   id: row.id,
@@ -47,9 +49,10 @@ const isMissingColumnError = (error, columnName) => {
 
 const loadOrderById = async (id, includeUser = true) => {
   let query = supabase.from("orders").select(orderSelect).eq("id", id).maybeSingle();
-  const { data, error } = await query;
+  let { data, error } = await query;
   if (error) throw new Error(error.message);
   if (!data) return null;
+  [data] = await autoDeliverIfDue([data]);
   return mapOrder(data, { includeUser });
 };
 
@@ -70,7 +73,7 @@ const loadCartWithProducts = async (userId) => {
 
   let { data: items, error: itemsError } = await supabase
     .from("cart_items")
-    .select("product_id, quantity, products(id, name, stock, price, discount_price, product_cost, shipping_price, product_images(image_url, sort_order))")
+    .select("product_id, quantity, products(id, name, sku, category, stock, price, discount_price, product_cost, shipping_price, product_images(image_url, sort_order))")
     .eq("cart_id", cart.id);
 
   if (
@@ -80,13 +83,13 @@ const loadCartWithProducts = async (userId) => {
   ) {
     const fallback = await supabase
       .from("cart_items")
-      .select("product_id, quantity, products(id, name, stock, price, discount_price, product_images(image_url, sort_order))")
+      .select("product_id, quantity, products(id, name, sku, category, stock, price, discount_price, product_images(image_url, sort_order))")
       .eq("cart_id", cart.id);
 
     items = (fallback.data || []).map((entry) => ({
       ...entry,
       products: entry.products
-        ? { ...entry.products, product_cost: 0, shipping_price: 0 }
+        ? { ...entry.products, product_cost: 0, shipping_price: 0, category: entry.products.category || "", sku: entry.products.sku || "" }
         : entry.products,
     }));
     itemsError = fallback.error;
@@ -122,6 +125,7 @@ export const createOrder = asyncHandler(async (req, res) => {
     paymentStatus = "pending",
     paymentIntentId = "",
     paymentMethod = "cod",
+    couponCode = "",
   } = req.body;
 
   const { cart, items } = await loadCartWithProducts(req.user._id);
@@ -163,6 +167,7 @@ export const createOrder = asyncHandler(async (req, res) => {
         item.products.product_images
           ?.slice()
           .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))[0]?.image_url || "",
+      sku: item.products.sku || "",
       price: unitSellingPrice,
       list_price: listPrice,
       discount_amount: unitDiscountAmount,
@@ -180,10 +185,36 @@ export const createOrder = asyncHandler(async (req, res) => {
 
   const subtotalAmount = orderItems.reduce((sum, item) => sum + Number(item.line_subtotal || 0), 0);
   const shippingTotal = orderItems.reduce((sum, item) => sum + Number(item.line_shipping_total || 0), 0);
-  const discountTotal = orderItems.reduce((sum, item) => sum + Number(item.line_discount_total || 0), 0);
+  const productDiscountTotal = orderItems.reduce((sum, item) => sum + Number(item.line_discount_total || 0), 0);
   const productCostTotal = orderItems.reduce((sum, item) => sum + Number(item.line_product_cost_total || 0), 0);
-  const totalAmount = subtotalAmount + shippingTotal;
-  const profitTotal = subtotalAmount - (productCostTotal + shippingTotal + discountTotal);
+
+  const itemSnapshots = orderItems.map((item) => ({
+    productId: item.product_id,
+    category: items.find((entry) => entry.product_id === item.product_id)?.products?.category || "",
+    quantity: Number(item.quantity || 0),
+    unitPrice: Number(item.price || 0),
+    subtotal: Number(item.line_subtotal || 0),
+  }));
+
+  let couponValidation = null;
+  if (String(couponCode || "").trim()) {
+    try {
+      couponValidation = await validateCouponForCart({
+        couponCode,
+        userId: req.user._id,
+        itemSnapshots,
+        subtotalAmount,
+      });
+    } catch (error) {
+      res.status(error.status || 400);
+      throw new Error(error.message);
+    }
+  }
+
+  const couponDiscountAmount = Number(couponValidation?.discountAmount || 0);
+  const discountTotal = productDiscountTotal + couponDiscountAmount;
+  const totalAmount = Math.max(0, subtotalAmount + shippingTotal - couponDiscountAmount);
+  const profitTotal = subtotalAmount - (productCostTotal + shippingTotal + productDiscountTotal + couponDiscountAmount);
 
   const { data: createdOrder, error: createOrderError } = await supabase
     .from("orders")
@@ -196,9 +227,17 @@ export const createOrder = asyncHandler(async (req, res) => {
       profit_total: profitTotal,
       total_amount: totalAmount,
       payment_status: paymentStatus,
-      order_status: "created",
+      order_status: "pending",
       payment_method: paymentMethod,
       payment_intent_id: paymentIntentId,
+      transaction_id: paymentIntentId || null,
+      paid_amount: paymentStatus === "paid" ? totalAmount : 0,
+      coupon_id: couponValidation?.coupon?.id || null,
+      coupon_code: couponValidation?.code || null,
+      coupon_title: couponValidation?.coupon?.title || null,
+      coupon_discount_type: couponValidation?.coupon?.discount_type || null,
+      coupon_discount_value: couponValidation?.coupon?.discount_value ?? null,
+      coupon_discount_amount: couponDiscountAmount,
     })
     .select("id")
     .single();
@@ -257,6 +296,31 @@ export const createOrder = asyncHandler(async (req, res) => {
     throw new Error(clearCartError.message);
   }
 
+  if (couponValidation?.coupon) {
+    try {
+      await recordCouponUsageForOrder({
+        coupon: couponValidation.coupon,
+        userId: req.user._id,
+        orderId: createdOrder.id,
+        discountAmount: couponDiscountAmount,
+      });
+    } catch (error) {
+      res.status(500);
+      throw new Error(error.message || "Failed to track coupon usage");
+    }
+  }
+
+  try {
+    await addOrderStatusHistory({
+      orderId: createdOrder.id,
+      status: "pending",
+      note: "Order placed by customer",
+      changedBy: req.user._id,
+    });
+  } catch {
+    // Non-blocking: order is already created.
+  }
+
   const order = await loadOrderById(createdOrder.id, true);
   res.status(201).json(order);
 });
@@ -273,7 +337,8 @@ export const getUserOrders = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 
-  res.json((data || []).map((row) => mapOrder(row, { includeUser: true })));
+  const rows = await autoDeliverIfDue(data || []);
+  res.json(rows.map((row) => mapOrder(row, { includeUser: true })));
 });
 
 export const getOrderById = asyncHandler(async (req, res) => {

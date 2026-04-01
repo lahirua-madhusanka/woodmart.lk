@@ -50,7 +50,7 @@ function ContactPage() {
           <div className="space-y-3 text-sm text-muted">
             <p className="inline-flex items-start gap-2"><MapPin size={16} className="mt-0.5 text-brand" />224 Artisan Street, New York</p>
             <p className="inline-flex items-center gap-2"><Phone size={16} className="text-brand" />+1 (212) 555-0193</p>
-            <p className="inline-flex items-center gap-2"><Mail size={16} className="text-brand" />support@atelieroak.com</p>
+            <p className="inline-flex items-center gap-2"><Mail size={16} className="text-brand" />support@woodmart.lk</p>
           </div>
           <div className="overflow-hidden rounded-xl">
             <img

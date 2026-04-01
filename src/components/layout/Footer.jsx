@@ -59,7 +59,7 @@ function Footer() {
               <Phone size={16} /> {settings.contactNumber || "+1 (212) 555-0193"}
             </li>
             <li className="inline-flex items-center gap-2">
-              <Mail size={16} /> {settings.supportEmail || "support@atelieroak.com"}
+              <Mail size={16} /> {settings.supportEmail || "support@woodmart.lk"}
             </li>
           </ul>
           <div className="mt-5 rounded-lg bg-brand-light p-3">

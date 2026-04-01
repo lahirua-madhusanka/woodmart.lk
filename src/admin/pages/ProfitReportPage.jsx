@@ -47,6 +47,11 @@ function ProfitReportPage() {
 
   const trend = useMemo(() => report?.trend || [], [report?.trend]);
   const trendMax = useMemo(() => Math.max(1, ...trend.map((item) => Number(item.profit || 0))), [trend]);
+  const orderTrend = useMemo(() => report?.orderTrend || [], [report?.orderTrend]);
+  const orderTrendMax = useMemo(
+    () => Math.max(1, ...orderTrend.map((item) => Number(item.orders || 0))),
+    [orderTrend]
+  );
 
   if (loading && !report) {
     return <Loader label="Loading profit report..." />;
@@ -113,10 +118,35 @@ function ProfitReportPage() {
         ) : (
           <div className="mt-4 flex h-56 items-end gap-2">
             {trend.map((entry) => {
-              const height = Math.max(10, Math.round((Number(entry.profit || 0) / trendMax) * 100));
+              const amount = Number(entry.profit || 0);
+              const height = Math.max(10, Math.round((amount / trendMax) * 100));
               return (
-                <div key={entry.date} className="flex flex-1 flex-col items-center gap-2">
+                <div key={entry.date} className="flex h-full flex-1 flex-col justify-end items-center gap-2">
+                  <span className="text-[10px] font-semibold text-muted">{money(amount)}</span>
                   <div className="w-full rounded-t-md bg-brand/80" style={{ height: `${height}%` }} />
+                  <span className="text-[10px] text-muted">{entry.date.slice(5)}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <h2 className="text-lg font-semibold text-ink">Order Trend</h2>
+        {!orderTrend.length ? (
+          <div className="mt-4">
+            <EmptyState title="No order trend data" description="Place orders in the selected period to see order trend." />
+          </div>
+        ) : (
+          <div className="mt-4 flex h-56 items-end gap-2">
+            {orderTrend.map((entry) => {
+              const count = Number(entry.orders || 0);
+              const height = Math.max(10, Math.round((count / orderTrendMax) * 100));
+              return (
+                <div key={entry.date} className="flex h-full flex-1 flex-col justify-end items-center gap-2">
+                  <span className="text-[10px] font-semibold text-muted">{count}</span>
+                  <div className="w-full rounded-t-md bg-emerald-500/80" style={{ height: `${height}%` }} />
                   <span className="text-[10px] text-muted">{entry.date.slice(5)}</span>
                 </div>
               );

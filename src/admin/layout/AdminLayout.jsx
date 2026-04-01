@@ -8,6 +8,7 @@ const mobileLinks = [
   { to: "/admin/products", label: "Products" },
   { to: "/admin/categories", label: "Categories" },
   { to: "/admin/orders", label: "Orders" },
+  { to: "/admin/custom-requests", label: "Custom Requests" },
   { to: "/admin/profit", label: "Profit Report" },
   { to: "/admin/messages", label: "Messages" },
   { to: "/admin/customers", label: "Customers" },

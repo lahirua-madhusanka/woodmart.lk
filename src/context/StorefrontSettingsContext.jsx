@@ -5,6 +5,25 @@ import {
 } from "../services/storefrontSettingsService";
 
 const StorefrontSettingsContext = createContext(null);
+const STOREFRONT_SETTINGS_CACHE_KEY = "storefront-settings-cache";
+
+const getCachedStorefrontSettings = () => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(STOREFRONT_SETTINGS_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+
+    return parsed;
+  } catch {
+    return null;
+  }
+};
 
 const normalizeHex = (value) => {
   const hex = String(value || "").trim();
@@ -34,7 +53,10 @@ const shadeHex = (hex, factor) => {
 };
 
 export function StorefrontSettingsProvider({ children }) {
-  const [settings, setSettings] = useState(defaultStorefrontSettings);
+  const [settings, setSettings] = useState(() => {
+    const cached = getCachedStorefrontSettings();
+    return { ...defaultStorefrontSettings, ...(cached || {}) };
+  });
 
   useEffect(() => {
     let ignore = false;
@@ -42,7 +64,12 @@ export function StorefrontSettingsProvider({ children }) {
     const load = async () => {
       const payload = await getStorefrontSettingsApi();
       if (!ignore) {
-        setSettings({ ...defaultStorefrontSettings, ...(payload || {}) });
+        const next = { ...defaultStorefrontSettings, ...(payload || {}) };
+        setSettings(next);
+
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(STOREFRONT_SETTINGS_CACHE_KEY, JSON.stringify(next));
+        }
       }
     };
 
@@ -56,7 +83,13 @@ export function StorefrontSettingsProvider({ children }) {
   useEffect(() => {
     const onSettingsUpdated = (event) => {
       const payload = event?.detail || {};
-      setSettings((prev) => ({ ...prev, ...payload }));
+      setSettings((prev) => {
+        const next = { ...prev, ...payload };
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(STOREFRONT_SETTINGS_CACHE_KEY, JSON.stringify(next));
+        }
+        return next;
+      });
     };
 
     window.addEventListener("storefront-settings-updated", onSettingsUpdated);
@@ -75,6 +108,11 @@ export function StorefrontSettingsProvider({ children }) {
     root.style.setProperty("--brand-dark", accentDark);
     root.style.setProperty("--brand-light", `${accentLight}33`);
   }, [settings.themeAccent]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(STOREFRONT_SETTINGS_CACHE_KEY, JSON.stringify(settings));
+  }, [settings]);
 
   const value = useMemo(() => {
     const currency = String(settings.currency || defaultStorefrontSettings.currency);

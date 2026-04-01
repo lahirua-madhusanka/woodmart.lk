@@ -1,4 +1,4 @@
-# Atelier Oak - Full-Stack Premium eCommerce
+# Woodmart.lk - Full-Stack Premium eCommerce
 
 Production-oriented eCommerce application with a React frontend and Node.js/Express/MongoDB backend, including JWT auth, cart/wishlist sync, checkout flow, Stripe payment integration, order history, and a full admin dashboard.
 
@@ -76,7 +76,7 @@ Copy from `server/.env.example`:
 ```bash
 NODE_ENV=development
 PORT=5000
-MONGO_URI=mongodb://127.0.0.1:27017/atelier_oak
+MONGO_URI=mongodb://127.0.0.1:27017/woodmart
 JWT_SECRET=replace_with_a_secure_long_secret
 JWT_EXPIRES_IN=7d
 CLIENT_URL=http://localhost:5173

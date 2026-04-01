@@ -6,11 +6,23 @@ import { useStorefrontSettings } from "../context/StorefrontSettingsContext";
 import { getApiErrorMessage } from "../services/apiClient";
 import { getOrderByIdApi } from "../services/orderService";
 
+const COURIER_TRACKING_URL = "https://www.prontolanka.lk/";
+
 function OrderConfirmationPage() {
   const { id } = useParams();
   const { formatMoney } = useStorefrontSettings();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  const handleCopyTracking = async () => {
+    if (!order?.trackingNumber) return;
+    try {
+      await navigator.clipboard.writeText(order.trackingNumber);
+      toast.success("Tracking number copied");
+    } catch (error) {
+      toast.error("Unable to copy tracking number");
+    }
+  };
 
   useEffect(() => {
     const loadOrder = async () => {
@@ -70,9 +82,16 @@ function OrderConfirmationPage() {
             <h2 className="font-semibold">Order Summary</h2>
             <p className="mt-2 text-sm text-muted">Payment: {order.paymentStatus}</p>
             <p className="mt-1 text-sm text-muted">Status: {order.orderStatus}</p>
+            <p className="mt-1 text-sm text-muted">Tracking #: {order.trackingNumber || "Not assigned yet"}</p>
+            <p className="mt-1 text-sm text-muted">Courier: {order.courierName || "Not assigned yet"}</p>
             <p className="mt-1 text-sm text-muted">Subtotal: {formatMoney(Number(order.subtotalAmount || 0))}</p>
             <p className="mt-1 text-sm text-muted">Shipping: {formatMoney(Number(order.shippingTotal || 0))}</p>
             <p className="mt-1 text-sm text-muted">Discount: {formatMoney(Number(order.discountTotal || 0))}</p>
+            {Number(order.couponDiscountAmount || 0) > 0 ? (
+              <p className="mt-1 text-sm text-muted">
+                Coupon ({order.couponCode || "applied"}): -{formatMoney(Number(order.couponDiscountAmount || 0))}
+              </p>
+            ) : null}
             <p className="mt-1 text-sm font-semibold text-brand-dark">Total: {formatMoney(Number(order.totalAmount || 0))}</p>
           </div>
         </div>
@@ -92,6 +111,18 @@ function OrderConfirmationPage() {
 
         <div className="mt-6 flex flex-wrap gap-3">
           <Link to="/orders" className="btn-primary">View all orders</Link>
+          {order.trackingNumber ? (
+            <>
+              <button type="button" onClick={handleCopyTracking} className="btn-secondary">Copy tracking</button>
+              <button
+                type="button"
+                onClick={() => window.open(COURIER_TRACKING_URL, "_blank", "noopener,noreferrer")}
+                className="btn-secondary"
+              >
+                Track order
+              </button>
+            </>
+          ) : null}
           <Link to="/shop" className="btn-secondary">Continue shopping</Link>
         </div>
       </div>

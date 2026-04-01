@@ -96,6 +96,15 @@ function Navbar() {
               </label>
             </form>
 
+            {isAuthenticated ? (
+              <NavLink
+                to="/my-requests"
+                className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-semibold text-ink transition hover:border-brand hover:text-brand"
+              >
+                My Requests
+              </NavLink>
+            ) : null}
+
             <RoutePrefetchLink
               routeKey="wishlist"
               to="/wishlist"
@@ -222,6 +231,9 @@ function Navbar() {
               ))}
               {isAuthenticated ? (
                 <>
+                  <NavLink to="/my-requests" onClick={() => setMobileOpen(false)} className={navLinkClass}>
+                    My Requests
+                  </NavLink>
                   <NavLink to="/account" onClick={() => setMobileOpen(false)} className={navLinkClass}>
                     My Account
                   </NavLink>
