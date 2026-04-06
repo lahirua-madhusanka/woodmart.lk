@@ -1,6 +1,10 @@
 import { io } from "socket.io-client";
 
-const SOCKET_BASE_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || "http://localhost:5000";
+const envSocketUrl = String(import.meta.env.VITE_SOCKET_URL || "").trim();
+const envApiUrl = String(import.meta.env.VITE_API_URL || "").trim();
+
+const apiOrigin = envApiUrl ? envApiUrl.replace(/\/api\/?$/, "") : "";
+const SOCKET_BASE_URL = envSocketUrl || apiOrigin || (import.meta.env.DEV ? "http://localhost:5000" : "");
 
 let socketInstance = null;
 let activeToken = "";
