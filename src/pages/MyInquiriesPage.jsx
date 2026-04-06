@@ -1,8 +1,10 @@
 import { Mail, CheckCircle2, MailCheck, Loader2, Trash2, AlertTriangle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import { useAuth } from "../context/AuthContext";
 import { getApiErrorMessage } from "../services/apiClient";
 import { deleteMyInquiry, getMyInquiries } from "../services/customerInquiriesService";
+import { getSocket } from "../services/socketService";
 
 const formatDate = (value) => {
   if (!value) return "";
@@ -43,6 +45,7 @@ const getStatusIcon = (status) => {
 };
 
 function MyInquiriesPage() {
+  const { token, isAuthenticated } = useAuth();
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState("");
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
@@ -67,6 +70,38 @@ function MyInquiriesPage() {
 
     loadInquiries();
   }, []);
+
+  useEffect(() => {
+    if (!token || !isAuthenticated) {
+      return undefined;
+    }
+
+    const socket = getSocket(token);
+    if (!socket) {
+      return undefined;
+    }
+
+    const handleInquiryDeleted = ({ id }) => {
+      if (!id) return;
+
+      setInquiries((prev) => {
+        const next = prev.filter((item) => item.id !== id);
+        setSelectedInquiry((current) => {
+          if (!current || current.id !== id) {
+            return current && next.some((item) => item.id === current.id) ? current : next[0] || null;
+          }
+          return next[0] || null;
+        });
+        return next;
+      });
+
+      setConfirmDeleteOpen(false);
+      setDeletingId((current) => (current === id ? "" : current));
+    };
+
+    socket.on("contact:inquiry-deleted", handleInquiryDeleted);
+    return () => socket.off("contact:inquiry-deleted", handleInquiryDeleted);
+  }, [token, isAuthenticated]);
 
   const handleDeleteInquiry = async () => {
     if (!selectedInquiry?.id || deletingId) {

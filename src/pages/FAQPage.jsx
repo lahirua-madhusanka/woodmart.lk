@@ -78,7 +78,7 @@ function FAQPage() {
     {
       id: "contact-support",
       question: "How can I contact customer support?",
-      answer: "You can reach our support team in the following ways: Email: support@woodmart.lk, Phone: +1 (212) 555-0193 (during business hours), Contact Form: Visit the Contact page on our website. Our team typically responds within 24 business hours."
+      answer: "You can reach our support team in the following ways: Email: support@woodmart.lk, Phone: 076 065 9957 (during business hours), Contact Form: Visit the Contact page on our website. Our team typically responds within 24 business hours."
     }
   ];
 

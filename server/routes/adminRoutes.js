@@ -32,6 +32,7 @@ import {
   updateAdminCoupon,
 } from "../controllers/couponController.js";
 import {
+  deleteAdminContactMessage,
   getAdminContactMessageById,
   getAdminContactMessages,
   replyAdminContactMessage,
@@ -54,6 +55,12 @@ const upload = multer({
     return cb(new Error("Only image files are allowed"));
   },
 });
+
+const roleChangeValidators = [
+  body("newRole").optional().isIn(["user", "admin"]).withMessage("Role must be user or admin"),
+  body("role").optional().isIn(["user", "admin"]).withMessage("Role must be user or admin"),
+  body("adminPassword").trim().notEmpty().withMessage("Password is required"),
+];
 
 router.use(protect, adminOnly);
 
@@ -191,13 +198,15 @@ router.put(
 );
 
 router.get("/users", getAllUsersAdmin);
+router.patch(
+  "/users/:id/role",
+  roleChangeValidators,
+  validateRequest,
+  updateUserRoleAdmin
+);
 router.put(
   "/users/:id/role",
-  [
-    body("role")
-      .isIn(["user", "admin"])
-      .withMessage("Role must be user or admin"),
-  ],
+  roleChangeValidators,
   validateRequest,
   updateUserRoleAdmin
 );
@@ -349,6 +358,12 @@ router.post(
   ],
   validateRequest,
   replyAdminContactMessage
+);
+router.delete(
+  "/contact-messages/:id",
+  [param("id").isUUID().withMessage("Invalid inquiry id")],
+  validateRequest,
+  deleteAdminContactMessage
 );
 
 export default router;

@@ -1,4 +1,5 @@
 import asyncHandler from "express-async-handler";
+import bcrypt from "bcryptjs";
 import supabase from "../config/supabase.js";
 import { addOrderStatusHistory, autoDeliverIfDue, buildOrderLifecycleTimestamps } from "../services/orderWorkflow.js";
 import { mapOrder, mapProduct, mapUser } from "../utils/dbMappers.js";
@@ -576,11 +577,22 @@ export const getAllUsersAdmin = asyncHandler(async (req, res) => {
 });
 
 export const updateUserRoleAdmin = asyncHandler(async (req, res) => {
-  const { role } = req.body;
+  const newRole = String(req.body.newRole || req.body.role || "").trim();
+  const adminPassword = String(req.body.adminPassword || "");
+
+  if (!newRole) {
+    res.status(400);
+    throw new Error("Role is required");
+  }
+
+  if (!adminPassword.trim()) {
+    res.status(400);
+    throw new Error("Password is required");
+  }
 
   const { data: existing, error: existingError } = await supabase
     .from("users")
-    .select("id")
+    .select("id, role")
     .eq("id", req.params.id)
     .maybeSingle();
 
@@ -594,9 +606,36 @@ export const updateUserRoleAdmin = asyncHandler(async (req, res) => {
     throw new Error("User not found");
   }
 
+  const { data: currentAdmin, error: currentAdminError } = await supabase
+    .from("users")
+    .select("id, password_hash, role")
+    .eq("id", req.user._id)
+    .maybeSingle();
+
+  if (currentAdminError) {
+    res.status(500);
+    throw new Error(currentAdminError.message);
+  }
+
+  if (!currentAdmin || currentAdmin.role !== "admin") {
+    res.status(403);
+    throw new Error("You are not authorized to perform this action");
+  }
+
+  if (!currentAdmin.password_hash || currentAdmin.password_hash === "SUPABASE_AUTH_MANAGED") {
+    res.status(400);
+    throw new Error("This account cannot verify password changes");
+  }
+
+  const passwordMatches = await bcrypt.compare(adminPassword, currentAdmin.password_hash);
+  if (!passwordMatches) {
+    res.status(401);
+    throw new Error("Incorrect admin password");
+  }
+
   const { data: updated, error: updateError } = await supabase
     .from("users")
-    .update({ role })
+    .update({ role: newRole })
     .eq("id", req.params.id)
     .select("id, name, email, role, created_at, updated_at")
     .single();

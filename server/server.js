@@ -18,6 +18,7 @@ import contactRoutes from "./routes/contactRoutes.js";
 import customProjectRoutes from "./routes/customProjectRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
+import newsletterRoutes from "./routes/newsletterRoutes.js";
 import seedRoutes from "./routes/seedRoutes.js";
 import storefrontRoutes from "./routes/storefrontRoutes.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
@@ -58,6 +59,7 @@ app.use("/api/contact", contactRoutes);
 app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/custom-projects", customProjectRoutes);
+app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/seed", seedRoutes);
 app.use("/api/store", storefrontRoutes);
 

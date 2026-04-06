@@ -8,6 +8,7 @@ import AdminProtectedRoute from "./admin/routes/AdminProtectedRoute";
 // Route-level splitting keeps the initial storefront payload small.
 const HomePage = lazy(() => import("./pages/HomePage"));
 const ShopPage = lazy(() => import("./pages/ShopPage"));
+const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const ProductDetailsPage = lazy(() => import("./pages/ProductDetailsPage"));
 const CartPage = lazy(() => import("./pages/CartPage"));
 const WishlistPage = lazy(() => import("./pages/WishlistPage"));
@@ -86,6 +87,7 @@ function App() {
       <Route path="/" element={<MainLayout />}>
         <Route index element={withSuspense(<HomePage />, "Loading home...")} />
         <Route path="shop" element={withSuspense(<ShopPage />, "Loading shop...")} />
+        <Route path="search" element={withSuspense(<SearchResultsPage />, "Searching products...")} />
         <Route path="product/:id" element={withSuspense(<ProductDetailsPage />, "Loading product...")} />
         <Route
           path="cart"

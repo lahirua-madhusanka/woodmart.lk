@@ -692,7 +692,6 @@ on conflict (id) do nothing;
 -- Contact inquiries
 create table if not exists public.contact_messages (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references public.users(id) on delete set null,
   first_name text not null,
   last_name text not null,
   email text not null,
@@ -707,7 +706,6 @@ create table if not exists public.contact_messages (
   updated_at timestamptz not null default now()
 );
 
-alter table public.contact_messages add column if not exists user_id uuid references public.users(id) on delete set null;
 alter table public.contact_messages add column if not exists admin_reply text;
 alter table public.contact_messages add column if not exists replied_at timestamptz;
 alter table public.contact_messages add column if not exists replied_by uuid;
@@ -719,12 +717,84 @@ create index if not exists idx_contact_messages_status_created
 create index if not exists idx_contact_messages_email_created
   on public.contact_messages(email, created_at desc);
 
-create index if not exists idx_contact_messages_user_id_created
-  on public.contact_messages(user_id, created_at desc);
-
 drop trigger if exists trg_contact_messages_updated_at on public.contact_messages;
 create trigger trg_contact_messages_updated_at
 before update on public.contact_messages
+for each row execute function public.set_updated_at();
+
+-- Newsletter subscribers
+create table if not exists public.newsletter_subscribers (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  user_id uuid references public.users(id) on delete set null,
+  status text not null default 'active' check (status in ('active', 'unsubscribed')),
+  source text not null default 'website',
+  subscribed_at timestamptz not null default now(),
+  unsubscribed_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.newsletter_subscribers add column if not exists user_id uuid;
+alter table public.newsletter_subscribers add column if not exists status text;
+alter table public.newsletter_subscribers add column if not exists source text;
+alter table public.newsletter_subscribers add column if not exists subscribed_at timestamptz;
+alter table public.newsletter_subscribers add column if not exists unsubscribed_at timestamptz;
+alter table public.newsletter_subscribers add column if not exists created_at timestamptz;
+alter table public.newsletter_subscribers add column if not exists updated_at timestamptz;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'newsletter_subscribers_status_check'
+  ) then
+    alter table public.newsletter_subscribers
+      add constraint newsletter_subscribers_status_check
+      check (status in ('active', 'unsubscribed'));
+  end if;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'newsletter_subscribers_user_id_fkey'
+  ) then
+    alter table public.newsletter_subscribers
+      add constraint newsletter_subscribers_user_id_fkey
+      foreign key (user_id) references public.users(id) on delete set null;
+  end if;
+end $$;
+
+update public.newsletter_subscribers set status = 'active' where status is null;
+update public.newsletter_subscribers set source = 'website' where source is null or trim(source) = '';
+update public.newsletter_subscribers set subscribed_at = now() where subscribed_at is null;
+update public.newsletter_subscribers set created_at = now() where created_at is null;
+update public.newsletter_subscribers set updated_at = now() where updated_at is null;
+
+alter table public.newsletter_subscribers alter column status set default 'active';
+alter table public.newsletter_subscribers alter column source set default 'website';
+alter table public.newsletter_subscribers alter column subscribed_at set default now();
+alter table public.newsletter_subscribers alter column created_at set default now();
+alter table public.newsletter_subscribers alter column updated_at set default now();
+
+alter table public.newsletter_subscribers alter column status set not null;
+alter table public.newsletter_subscribers alter column source set not null;
+alter table public.newsletter_subscribers alter column subscribed_at set not null;
+alter table public.newsletter_subscribers alter column created_at set not null;
+alter table public.newsletter_subscribers alter column updated_at set not null;
+
+create unique index if not exists idx_newsletter_subscribers_email_unique on public.newsletter_subscribers(email);
+create unique index if not exists idx_newsletter_subscribers_email_lower_unique on public.newsletter_subscribers(lower(email));
+create index if not exists idx_newsletter_subscribers_status_created on public.newsletter_subscribers(status, created_at desc);
+create index if not exists idx_newsletter_subscribers_user on public.newsletter_subscribers(user_id);
+
+drop trigger if exists trg_newsletter_subscribers_updated_at on public.newsletter_subscribers;
+create trigger trg_newsletter_subscribers_updated_at
+before update on public.newsletter_subscribers
 for each row execute function public.set_updated_at();
 
 -- Coupons
@@ -1040,6 +1110,7 @@ alter table public.banners enable row level security;
 alter table public.coupons enable row level security;
 alter table public.coupon_usages enable row level security;
 alter table public.contact_messages enable row level security;
+alter table public.newsletter_subscribers enable row level security;
 
 -- Temporary permissive policies for development.
 -- Replace with strict authenticated policies before production.
@@ -1083,6 +1154,8 @@ drop policy if exists "dev_all_coupon_usages" on public.coupon_usages;
 create policy "dev_all_coupon_usages" on public.coupon_usages for all using (true) with check (true);
 drop policy if exists "dev_all_contact_messages" on public.contact_messages;
 create policy "dev_all_contact_messages" on public.contact_messages for all using (true) with check (true);
+drop policy if exists "dev_all_newsletter_subscribers" on public.newsletter_subscribers;
+create policy "dev_all_newsletter_subscribers" on public.newsletter_subscribers for all using (true) with check (true);
 drop policy if exists "dev_all_chat_conversations" on public.chat_conversations;
 create policy "dev_all_chat_conversations" on public.chat_conversations for all using (true) with check (true);
 drop policy if exists "dev_all_chat_messages" on public.chat_messages;

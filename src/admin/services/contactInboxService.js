@@ -1,4 +1,4 @@
-import { get, patch, post } from "./adminApi";
+import { del, get, patch, post } from "./adminApi";
 
 export const getContactInquiries = async (status = "", search = "") => {
   const params = new URLSearchParams();
@@ -25,5 +25,10 @@ export const getContactInquiryById = async (id) => {
 
 export const replyToContactInquiry = async (id, payload) => {
   const response = await post(`/admin/contact-messages/${id}/reply`, payload);
+  return response?.data;
+};
+
+export const deleteContactInquiry = async (id) => {
+  const response = await del(`/admin/contact-messages/${id}`);
   return response?.data;
 };

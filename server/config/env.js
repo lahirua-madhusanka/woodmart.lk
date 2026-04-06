@@ -26,6 +26,8 @@ const env = {
   smtpPass: process.env.SMTP_PASS || "",
   smtpFrom: process.env.SMTP_FROM || "",
   emailDebugLog: String(process.env.EMAIL_DEBUG_LOG || "false").toLowerCase() === "true",
+  brevoApiKey: process.env.BREVO_API_KEY || "",
+  brevoNewsletterListId: Number(process.env.BREVO_NEWSLETTER_LIST_ID || 0),
 };
 
 export default env;

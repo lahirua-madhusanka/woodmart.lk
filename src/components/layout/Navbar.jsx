@@ -39,7 +39,7 @@ function Navbar() {
   const handleSearch = (event) => {
     event.preventDefault();
     const query = searchText.trim();
-    navigate(query ? `/shop?q=${encodeURIComponent(query)}` : "/shop");
+    navigate(query ? `/search?q=${encodeURIComponent(query)}` : "/search");
     setMobileOpen(false);
   };
 

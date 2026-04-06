@@ -28,6 +28,24 @@ const mapContactMessage = (row = {}) => ({
   updatedAt: row.updated_at || null,
 });
 
+const emitContactInquiryDeleted = (req, { id, userId = null, email = "" } = {}) => {
+  const io = req.app?.locals?.io;
+  if (!io) {
+    return;
+  }
+
+  const payload = {
+    id,
+    userId,
+    email,
+  };
+
+  io.to("admins").emit("contact:inquiry-deleted", payload);
+  if (userId) {
+    io.to(`user:${userId}`).emit("contact:inquiry-deleted", payload);
+  }
+};
+
 export const submitContactMessage = asyncHandler(async (req, res) => {
   const firstName = String(req.body.firstName || "").trim();
   const lastName = String(req.body.lastName || "").trim();
@@ -252,8 +270,58 @@ export const deleteCustomerContactMessage = asyncHandler(async (req, res) => {
     throw new Error(deleteError.message);
   }
 
+  emitContactInquiryDeleted(req, {
+    id: req.params.id,
+    userId: existing.user_id || req.user.id,
+    email: existing.email || userEmail,
+  });
+
   res.json({
     message: "Inquiry deleted successfully",
+    id: req.params.id,
+  });
+});
+
+export const deleteAdminContactMessage = asyncHandler(async (req, res) => {
+  const { data: existing, error: fetchError } = await supabase
+    .from("contact_messages")
+    .select("id, user_id, email")
+    .eq("id", req.params.id)
+    .maybeSingle();
+
+  if (fetchError) {
+    if (isMissingRelationError(fetchError.message)) {
+      res.status(400);
+      throw new Error("Run the latest schema SQL to enable contact inquiries table");
+    }
+    res.status(500);
+    throw new Error(fetchError.message);
+  }
+
+  if (!existing) {
+    res.status(404);
+    throw new Error("Contact message not found");
+  }
+
+  const { error } = await supabase.from("contact_messages").delete().eq("id", req.params.id);
+
+  if (error) {
+    if (isMissingRelationError(error.message)) {
+      res.status(400);
+      throw new Error("Run the latest schema SQL to enable contact inquiries table");
+    }
+    res.status(500);
+    throw new Error(error.message);
+  }
+
+  emitContactInquiryDeleted(req, {
+    id: req.params.id,
+    userId: existing.user_id || null,
+    email: existing.email || "",
+  });
+
+  res.json({
+    message: "Contact message deleted",
     id: req.params.id,
   });
 });

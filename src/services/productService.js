@@ -5,6 +5,13 @@ export const getProductsApi = async () => {
   return data;
 };
 
+export const searchProductsApi = async (query) => {
+  const { data } = await apiClient.get("/products", {
+    params: { q: query },
+  });
+  return data;
+};
+
 export const getProductByIdApi = async (id) => {
   const { data } = await apiClient.get(`/products/${id}`);
   return data;

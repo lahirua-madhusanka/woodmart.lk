@@ -1,7 +1,9 @@
 import { Search, Loader2, Mail, CheckCircle2, MailCheck } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
+import { useAdminAuth } from "../../context/AdminAuthContext";
 import { getApiErrorMessage } from "../../services/apiClient";
+import { getSocket } from "../../services/socketService";
 import {
   getContactInquiries,
   getContactInquiryById,
@@ -48,6 +50,7 @@ const getStatusIcon = (status) => {
 };
 
 function ContactInboxPage() {
+  const { token, isAuthenticated } = useAdminAuth();
   const [loading, setLoading] = useState(true);
   const [loadingSelected, setLoadingSelected] = useState(false);
   const [updating, setUpdating] = useState(null);
@@ -83,6 +86,38 @@ function ContactInboxPage() {
   useEffect(() => {
     loadInquiries();
   }, [loadInquiries]);
+
+  useEffect(() => {
+    if (!token || !isAuthenticated) {
+      return undefined;
+    }
+
+    const socket = getSocket(token);
+    if (!socket) {
+      return undefined;
+    }
+
+    const handleInquiryDeleted = ({ id }) => {
+      if (!id) return;
+
+      setInquiries((prev) => {
+        const next = prev.filter((item) => item.id !== id);
+        setSelectedInquiryId((currentSelectedId) => {
+          if (currentSelectedId !== id) {
+            return next.some((item) => item.id === currentSelectedId) ? currentSelectedId : next[0]?.id || "";
+          }
+          return next[0]?.id || "";
+        });
+        return next;
+      });
+
+      setReplyMessage((current) => (selectedInquiryId === id ? "" : current));
+      setReplyNote((current) => (selectedInquiryId === id ? "" : current));
+    };
+
+    socket.on("contact:inquiry-deleted", handleInquiryDeleted);
+    return () => socket.off("contact:inquiry-deleted", handleInquiryDeleted);
+  }, [token, isAuthenticated, selectedInquiryId]);
 
   useEffect(() => {
     if (!selectedInquiryId) {

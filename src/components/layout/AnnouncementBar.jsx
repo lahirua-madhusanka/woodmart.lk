@@ -6,11 +6,11 @@ function AnnouncementBar() {
       <div className="container-pad flex items-center justify-between">
         <div className="flex items-center gap-4">
           <span className="inline-flex items-center gap-1">
-            <ShieldCheck size={14} /> 30-day easy returns
+            <ShieldCheck size={14} /> 7-day easy returns
           </span>
         </div>
         <span className="inline-flex items-center gap-1 text-brand-light">
-          <Sparkles size={14} /> New spring arrivals now live
+          <Sparkles size={14} /> New arrivals now live
         </span>
       </div>
     </div>

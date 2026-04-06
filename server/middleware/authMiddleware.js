@@ -90,7 +90,7 @@ export const optionalProtect = asyncHandler(async (req, res, next) => {
 export const adminOnly = (req, res, next) => {
   if (req.user?.role !== "admin") {
     res.status(403);
-    throw new Error("Admin access required");
+    throw new Error("You are not authorized to perform this action");
   }
   next();
 };
