@@ -164,6 +164,15 @@ export const registerUser = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     emailSent = false;
+    if (env.emailDebugLog) {
+      // eslint-disable-next-line no-console
+      console.error("[EMAIL_DEBUG] verification send failed", {
+        email: createdUser.email,
+        userId: createdUser.id,
+        message: error?.message || "Unknown error",
+        statusCode: error?.statusCode || null,
+      });
+    }
   }
 
   res.status(201).json({

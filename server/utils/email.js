@@ -44,10 +44,20 @@ const getTransporter = () => {
   return transporter;
 };
 
+const throwMissingSmtpError = (purpose) => {
+  const error = new Error(`SMTP email is not configured for ${purpose}.`);
+  error.statusCode = 502;
+  throw error;
+};
+
 export const sendVerificationEmail = async ({ toEmail, name, verificationUrl }) => {
   const mailer = getTransporter();
 
   if (!mailer) {
+    if (env.nodeEnv !== "development") {
+      throwMissingSmtpError("verification emails");
+    }
+
     // Development fallback when SMTP isn't configured.
     // eslint-disable-next-line no-console
     console.log(`[EMAIL_VERIFICATION_LINK] ${toEmail}: ${verificationUrl}`);
@@ -93,6 +103,16 @@ export const sendVerificationEmail = async ({ toEmail, name, verificationUrl }) 
       );
     }
   } catch (error) {
+    if (env.emailDebugLog) {
+      // eslint-disable-next-line no-console
+      console.error("[EMAIL_DEBUG] verification provider error", {
+        toEmail,
+        message: error?.message || "Unknown error",
+        response: error?.response || null,
+        code: error?.code || null,
+      });
+    }
+
     if (isSmtpThrottleError(error)) {
       const wrappedError = new Error("Email provider is rate limiting requests. Please try again in 60 seconds.");
       wrappedError.statusCode = 429;
@@ -110,6 +130,10 @@ export const sendPasswordResetEmail = async ({ toEmail, name, resetUrl }) => {
   const mailer = getTransporter();
 
   if (!mailer) {
+    if (env.nodeEnv !== "development") {
+      throwMissingSmtpError("password reset emails");
+    }
+
     // Development fallback when SMTP isn't configured.
     // eslint-disable-next-line no-console
     console.log(`[PASSWORD_RESET_LINK] ${toEmail}: ${resetUrl}`);
@@ -137,6 +161,16 @@ export const sendPasswordResetEmail = async ({ toEmail, name, resetUrl }) => {
       `,
     });
   } catch (error) {
+    if (env.emailDebugLog) {
+      // eslint-disable-next-line no-console
+      console.error("[EMAIL_DEBUG] password reset provider error", {
+        toEmail,
+        message: error?.message || "Unknown error",
+        response: error?.response || null,
+        code: error?.code || null,
+      });
+    }
+
     if (isSmtpThrottleError(error)) {
       const wrappedError = new Error("Email provider is rate limiting requests. Please try again in 60 seconds.");
       wrappedError.statusCode = 429;
@@ -160,6 +194,10 @@ export const sendContactReplyEmail = async ({
   const mailer = getTransporter();
 
   if (!mailer) {
+    if (env.nodeEnv !== "development") {
+      throwMissingSmtpError("contact reply emails");
+    }
+
     // Development fallback when SMTP isn't configured.
     // eslint-disable-next-line no-console
     console.log(
@@ -190,6 +228,16 @@ export const sendContactReplyEmail = async ({
       `,
     });
   } catch (error) {
+    if (env.emailDebugLog) {
+      // eslint-disable-next-line no-console
+      console.error("[EMAIL_DEBUG] contact reply provider error", {
+        toEmail,
+        message: error?.message || "Unknown error",
+        response: error?.response || null,
+        code: error?.code || null,
+      });
+    }
+
     if (isSmtpThrottleError(error)) {
       const wrappedError = new Error("Email provider is rate limiting requests. Please try again in 60 seconds.");
       wrappedError.statusCode = 429;
