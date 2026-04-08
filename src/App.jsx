@@ -1,5 +1,5 @@
-import { lazy, Suspense } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { lazy, Suspense, useEffect } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import PrivateRoute from "./components/auth/PrivateRoute";
 import PageFallbackLoader from "./components/common/PageFallbackLoader";
 import MainLayout from "./components/layout/MainLayout";
@@ -54,6 +54,28 @@ const withSuspense = (node, label) => (
 );
 
 function App() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const action = searchParams.get("action");
+    const token = searchParams.get("token");
+
+    if (!action || !token) {
+      return;
+    }
+
+    if (action === "verify-email") {
+      navigate(`/verify-email?token=${encodeURIComponent(token)}`, { replace: true });
+      return;
+    }
+
+    if (action === "reset-password") {
+      navigate(`/reset-password?token=${encodeURIComponent(token)}`, { replace: true });
+    }
+  }, [location.search, navigate]);
+
   return (
     <Routes>
       <Route path="/admin/login" element={withSuspense(<AdminLoginPage />, "Loading admin login...")} />

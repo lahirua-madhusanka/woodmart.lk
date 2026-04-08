@@ -35,10 +35,10 @@ const createVerificationToken = () => {
 };
 
 const buildVerificationUrl = (token) =>
-  `${env.clientUrl}/verify-email?token=${encodeURIComponent(token)}`;
+  `${String(env.clientUrl || "").replace(/\/+$/, "")}/?action=verify-email&token=${encodeURIComponent(token)}`;
 
 const buildPasswordResetUrl = (token) =>
-  `${env.clientUrl}/reset-password?token=${encodeURIComponent(token)}`;
+  `${String(env.clientUrl || "").replace(/\/+$/, "")}/?action=reset-password&token=${encodeURIComponent(token)}`;
 
 const isStrongPassword = (password) => {
   const value = String(password || "");
@@ -164,15 +164,13 @@ export const registerUser = asyncHandler(async (req, res) => {
     });
   } catch (error) {
     emailSent = false;
-    if (env.emailDebugLog) {
-      // eslint-disable-next-line no-console
-      console.error("[EMAIL_DEBUG] verification send failed", {
-        email: createdUser.email,
-        userId: createdUser.id,
-        message: error?.message || "Unknown error",
-        statusCode: error?.statusCode || null,
-      });
-    }
+    // eslint-disable-next-line no-console
+    console.error("[EMAIL_DEBUG] verification send failed", {
+      email: createdUser.email,
+      userId: createdUser.id,
+      message: error?.message || "Unknown error",
+      statusCode: error?.statusCode || null,
+    });
   }
 
   res.status(201).json({

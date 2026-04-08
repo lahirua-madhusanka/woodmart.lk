@@ -44,6 +44,33 @@ const getTransporter = () => {
   return transporter;
 };
 
+export const verifyEmailTransport = async () => {
+  const mailer = getTransporter();
+
+  if (!mailer) {
+    return {
+      ok: false,
+      reason: "missing_smtp_config",
+    };
+  }
+
+  try {
+    await mailer.verify();
+    return {
+      ok: true,
+      reason: "smtp_ready",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      reason: "smtp_verify_failed",
+      code: error?.code || null,
+      response: error?.response || null,
+      message: error?.message || "Unknown SMTP verification error",
+    };
+  }
+};
+
 const throwMissingSmtpError = (purpose) => {
   const error = new Error(`SMTP email is not configured for ${purpose}.`);
   error.statusCode = 502;
@@ -103,15 +130,13 @@ export const sendVerificationEmail = async ({ toEmail, name, verificationUrl }) 
       );
     }
   } catch (error) {
-    if (env.emailDebugLog) {
-      // eslint-disable-next-line no-console
-      console.error("[EMAIL_DEBUG] verification provider error", {
-        toEmail,
-        message: error?.message || "Unknown error",
-        response: error?.response || null,
-        code: error?.code || null,
-      });
-    }
+    // eslint-disable-next-line no-console
+    console.error("[EMAIL_DEBUG] verification provider error", {
+      toEmail,
+      message: error?.message || "Unknown error",
+      response: error?.response || null,
+      code: error?.code || null,
+    });
 
     if (isSmtpThrottleError(error)) {
       const wrappedError = new Error("Email provider is rate limiting requests. Please try again in 60 seconds.");
