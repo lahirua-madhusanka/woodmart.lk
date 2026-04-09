@@ -36,6 +36,23 @@ const getClientBaseUrl = (req) => {
   return normalizeBaseUrl(env.clientUrl);
 };
 
+const getApiBaseUrl = (req) => {
+  const configured = normalizeBaseUrl(env.apiPublicUrl);
+  if (configured) {
+    return configured;
+  }
+
+  const forwardedProto = String(req?.headers?.["x-forwarded-proto"] || "").split(",")[0].trim();
+  const protocol = forwardedProto || req?.protocol || "https";
+  const host = String(req?.headers?.host || "").trim();
+
+  if (!host) {
+    return "";
+  }
+
+  return `${protocol}://${host}`.replace(/\/+$/, "");
+};
+
 const createVerificationToken = () => {
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashVerificationToken(token);
@@ -47,11 +64,103 @@ const createVerificationToken = () => {
   };
 };
 
-const buildVerificationUrl = (req, token) =>
-  `${getClientBaseUrl(req)}/verify-email?token=${encodeURIComponent(token)}`;
+const buildVerificationUrl = (req, token) => {
+  const apiBase = getApiBaseUrl(req);
+  if (!apiBase) {
+    return `${getClientBaseUrl(req)}/verify-email?token=${encodeURIComponent(token)}`;
+  }
+  return `${apiBase}/api/auth/verify-email/redirect?token=${encodeURIComponent(token)}`;
+};
 
 const buildPasswordResetUrl = (req, token) =>
   `${getClientBaseUrl(req)}/reset-password?token=${encodeURIComponent(token)}`;
+
+const verifyEmailTokenAndActivate = async (token) => {
+  const tokenHash = hashVerificationToken(token);
+
+  for (const [cachedTokenHash, verifiedAt] of recentVerifiedTokens.entries()) {
+    if (Date.now() - verifiedAt > RECENT_VERIFIED_TOKEN_TTL_MS) {
+      recentVerifiedTokens.delete(cachedTokenHash);
+    }
+  }
+
+  if (recentVerifiedTokens.has(tokenHash)) {
+    return {
+      status: "already_verified",
+      message: "Email already verified. Please log in.",
+    };
+  }
+
+  const { data: tokenRow, error } = await supabase
+    .from("verification_tokens")
+    .select("id, user_id, expires_at")
+    .eq("token", tokenHash)
+    .maybeSingle();
+
+  if (error) {
+    const wrapped = new Error(error.message);
+    wrapped.statusCode = 500;
+    throw wrapped;
+  }
+
+  if (!tokenRow) {
+    const wrapped = new Error("Invalid verification link");
+    wrapped.statusCode = 400;
+    throw wrapped;
+  }
+
+  const expiresAt = tokenRow.expires_at ? new Date(tokenRow.expires_at) : null;
+  if (!expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
+    await supabase.from("verification_tokens").delete().eq("id", tokenRow.id);
+    const wrapped = new Error("Verification link has expired. Please request a new one.");
+    wrapped.statusCode = 400;
+    throw wrapped;
+  }
+
+  const { data: user, error: userError } = await supabase
+    .from("users")
+    .select("id, email_verified")
+    .eq("id", tokenRow.user_id)
+    .maybeSingle();
+
+  if (userError) {
+    const wrapped = new Error(userError.message);
+    wrapped.statusCode = 500;
+    throw wrapped;
+  }
+
+  if (!user) {
+    await supabase.from("verification_tokens").delete().eq("id", tokenRow.id);
+    const wrapped = new Error("Invalid verification link");
+    wrapped.statusCode = 400;
+    throw wrapped;
+  }
+
+  if (!user.email_verified) {
+    const { error: updateError } = await supabase.from("users").update({
+      email_verified: true,
+      email_verified_at: new Date().toISOString(),
+      email_verification_token_hash: null,
+      email_verification_expires_at: null,
+    }).eq("id", user.id);
+
+    if (updateError) {
+      const wrapped = new Error(updateError.message);
+      wrapped.statusCode = 500;
+      throw wrapped;
+    }
+  }
+
+  await supabase.from("verification_tokens").delete().eq("id", tokenRow.id);
+  recentVerifiedTokens.set(tokenHash, Date.now());
+
+  return {
+    status: user.email_verified ? "already_verified" : "verified",
+    message: user.email_verified
+      ? "Email already verified. Please log in."
+      : "Email verified successfully",
+  };
+};
 
 const isStrongPassword = (password) => {
   const value = String(password || "");
@@ -649,95 +758,49 @@ export const verifyEmail = asyncHandler(async (req, res) => {
     throw new Error("Invalid verification link");
   }
 
-  const tokenHash = hashVerificationToken(token);
-
-  // Clean stale entries from in-memory recently-verified cache.
-  for (const [cachedTokenHash, verifiedAt] of recentVerifiedTokens.entries()) {
-    if (Date.now() - verifiedAt > RECENT_VERIFIED_TOKEN_TTL_MS) {
-      recentVerifiedTokens.delete(cachedTokenHash);
-    }
-  }
-
-  if (recentVerifiedTokens.has(tokenHash)) {
+  try {
+    const result = await verifyEmailTokenAndActivate(token);
     return res.json({
       success: true,
-      status: "already_verified",
-      message: "Email already verified. Please log in.",
+      status: result.status,
+      message: result.message,
+    });
+  } catch (error) {
+    if (error?.statusCode) {
+      res.status(error.statusCode);
+    }
+    throw error;
+  }
+});
+
+export const verifyEmailRedirect = asyncHandler(async (req, res) => {
+  const token = String(req.query.token || "").trim();
+  const clientBase = getClientBaseUrl(req);
+  const redirectTo = (params) => {
+    const query = new URLSearchParams(params).toString();
+    return res.redirect(`${clientBase}/verify-email?${query}`);
+  };
+
+  if (!token) {
+    return redirectTo({
+      status: "error",
+      message: "Invalid verification link",
     });
   }
 
-  const { data: tokenRow, error } = await supabase
-    .from("verification_tokens")
-    .select("id, user_id, expires_at")
-    .eq("token", tokenHash)
-    .maybeSingle();
-
-  if (error) {
-    res.status(500);
-    throw new Error(error.message);
-  }
-
-  if (!tokenRow) {
-    res.status(400);
-    throw new Error("Invalid verification link");
-  }
-
-  const expiresAt = tokenRow.expires_at ? new Date(tokenRow.expires_at) : null;
-  if (!expiresAt || Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() < Date.now()) {
-    await supabase.from("verification_tokens").delete().eq("id", tokenRow.id);
-    res.status(400);
-    throw new Error("Verification link has expired. Please request a new one.");
-  }
-
-  const { data: user, error: userError } = await supabase
-    .from("users")
-    .select("id, email_verified")
-    .eq("id", tokenRow.user_id)
-    .maybeSingle();
-
-  if (userError) {
-    res.status(500);
-    throw new Error(userError.message);
-  }
-
-  if (!user) {
-    await supabase.from("verification_tokens").delete().eq("id", tokenRow.id);
-    res.status(400);
-    throw new Error("Invalid verification link");
-  }
-
-  if (user.email_verified) {
-    await supabase.from("verification_tokens").delete().eq("id", tokenRow.id);
-    recentVerifiedTokens.set(tokenHash, Date.now());
-    return res.json({
-      success: true,
-      status: "already_verified",
-      message: "Email already verified. Please log in.",
+  try {
+    const result = await verifyEmailTokenAndActivate(token);
+    return redirectTo({
+      status: result.status,
+      message: result.message,
+    });
+  } catch (error) {
+    return redirectTo({
+      status: "error",
+      message: error?.message || "Verification failed. Please request a new verification email.",
+      token,
     });
   }
-
-  if (!user.email_verified) {
-    const { error: updateError } = await supabase.from("users").update({
-      email_verified: true,
-      email_verified_at: new Date().toISOString(),
-      email_verification_token_hash: null,
-      email_verification_expires_at: null,
-    }).eq("id", user.id);
-
-    if (updateError) {
-      res.status(500);
-      throw new Error(updateError.message);
-    }
-  }
-
-  await supabase.from("verification_tokens").delete().eq("id", tokenRow.id);
-  recentVerifiedTokens.set(tokenHash, Date.now());
-
-  return res.json({
-    success: true,
-    status: "verified",
-    message: "Email verified successfully",
-  });
 });
 
 export const resendVerificationEmail = asyncHandler(async (req, res) => {

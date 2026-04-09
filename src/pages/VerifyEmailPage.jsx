@@ -18,6 +18,8 @@ function VerifyEmailPage() {
   }, [verifyEmail]);
 
   const token = useMemo(() => searchParams.get("token") || "", [searchParams]);
+  const presetStatus = useMemo(() => searchParams.get("status") || "", [searchParams]);
+  const presetMessage = useMemo(() => searchParams.get("message") || "", [searchParams]);
   const errorDescription = useMemo(
     () => searchParams.get("error_description") || searchParams.get("error") || "",
     [searchParams]
@@ -27,6 +29,26 @@ function VerifyEmailPage() {
     let cancelled = false;
 
     const run = async () => {
+      if (presetStatus) {
+        if (cancelled) return;
+
+        if (presetStatus === "verified") {
+          setStatus("success");
+          setMessage(presetMessage || "Your email is verified. You can now log in.");
+          return;
+        }
+
+        if (presetStatus === "already_verified") {
+          setStatus("already_verified");
+          setMessage(presetMessage || "Email already verified. Please log in.");
+          return;
+        }
+
+        setStatus("error");
+        setMessage(presetMessage || "Verification failed or the link expired. Please request a new verification email.");
+        return;
+      }
+
       if (errorDescription) {
         if (cancelled) return;
         setStatus("error");
@@ -83,7 +105,7 @@ function VerifyEmailPage() {
     return () => {
       cancelled = true;
     };
-  }, [errorDescription, token]);
+  }, [errorDescription, presetMessage, presetStatus, token]);
 
   useEffect(() => {
     if (status !== "success" && status !== "already_verified") {
