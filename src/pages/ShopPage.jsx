@@ -1,28 +1,82 @@
 import { Search, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import ProductGrid from "../components/products/ProductGrid";
 import { useStore } from "../context/StoreContext";
+import { getProductsApi } from "../services/productService";
 
 function ShopPage() {
-  const { loadingProducts, products } = useStore();
-  const [params] = useSearchParams();
-  const [search, setSearch] = useState(params.get("q") || "");
-  const [category, setCategory] = useState("All");
+  const { products } = useStore();
+  const [params, setParams] = useSearchParams();
+  const urlCategory = (params.get("category") || "").trim();
+  const urlQuery = (params.get("q") || "").trim();
+
+  const [search, setSearch] = useState(urlQuery);
+  const [category, setCategory] = useState(urlCategory || "All");
   const [minRating, setMinRating] = useState(0);
   const [maxPrice, setMaxPrice] = useState(200000);
   const [sortBy, setSortBy] = useState("featured");
   const [visibleCount, setVisibleCount] = useState(6);
+  const [catalog, setCatalog] = useState([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
+
+  useEffect(() => {
+    setSearch(urlQuery);
+    setCategory(urlCategory || "All");
+    setVisibleCount(6);
+  }, [urlCategory, urlQuery]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadProducts = async () => {
+      setLoadingCatalog(true);
+      try {
+        const data = await getProductsApi({
+          category: urlCategory || undefined,
+          q: urlQuery || undefined,
+        });
+
+        if (!ignore) {
+          setCatalog(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        if (!ignore) {
+          setCatalog([]);
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingCatalog(false);
+        }
+      }
+    };
+
+    loadProducts();
+
+    return () => {
+      ignore = true;
+    };
+  }, [urlCategory, urlQuery]);
+
+  const updateQueryParam = (key, value) => {
+    const nextParams = new URLSearchParams(params);
+    if (value == null || value === "" || value === "All") {
+      nextParams.delete(key);
+    } else {
+      nextParams.set(key, value);
+    }
+    setParams(nextParams, { replace: true });
+  };
 
   const uniqueCategories = useMemo(
-    () => ["All", ...new Set(products.map((item) => item.category))],
+    () => ["All", ...new Set((products || []).map((item) => item.category).filter(Boolean))],
     [products]
   );
 
   const filtered = useMemo(() => {
     const lowered = search.trim().toLowerCase();
 
-    const data = products
+    const data = catalog
       .filter((item) => (category === "All" ? true : item.category === category))
       .filter((item) => Number(item.discountPrice || item.price) <= maxPrice)
       .filter((item) => item.rating >= minRating)
@@ -50,9 +104,21 @@ function ShopPage() {
       );
     }
     return data;
-  }, [category, maxPrice, minRating, products, search, sortBy]);
+  }, [catalog, category, maxPrice, minRating, search, sortBy]);
 
   const visibleProducts = filtered.slice(0, visibleCount);
+
+  const onCategoryChange = (nextCategory) => {
+    setCategory(nextCategory);
+    setVisibleCount(6);
+    updateQueryParam("category", nextCategory);
+  };
+
+  const onSearchChange = (value) => {
+    setSearch(value);
+    setVisibleCount(6);
+    updateQueryParam("q", value.trim());
+  };
 
   return (
     <section className="container-pad py-10">
@@ -76,7 +142,7 @@ function ShopPage() {
               <Search size={15} className="text-muted" />
               <input
                 value={search}
-                onChange={(event) => setSearch(event.target.value)}
+                onChange={(event) => onSearchChange(event.target.value)}
                 placeholder="Find products"
                 className="ml-2 w-full text-sm outline-none"
               />
@@ -92,7 +158,7 @@ function ShopPage() {
                     type="radio"
                     className="accent-brand"
                     checked={category === entry}
-                    onChange={() => setCategory(entry)}
+                    onChange={() => onCategoryChange(entry)}
                   />
                   {entry}
                 </label>
@@ -143,9 +209,13 @@ function ShopPage() {
             </select>
           </div>
 
-          {loadingProducts ? (
+          {loadingCatalog ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-muted">
               Loading catalog...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-muted">
+              No products found.
             </div>
           ) : (
             <ProductGrid products={visibleProducts} />

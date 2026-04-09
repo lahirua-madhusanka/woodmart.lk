@@ -21,15 +21,76 @@ const defaultSettings = {
   heroSecondaryButtonLink: "/shop",
   heroImage:
     "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80",
+  heroSlides: [
+    {
+      id: "hero-slide-1",
+      imageUrl:
+        "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80",
+      title: "Craft your space with timeless pieces.",
+      subtitle:
+        "Discover premium furniture, decor, and lifestyle objects inspired by natural materials and modern living.",
+      buttonText: "Shop Now",
+      buttonLink: "/shop",
+      displayOrder: 1,
+      status: "active",
+    },
+  ],
 };
 
-const normalizeSettings = (data = {}) => ({
-  ...defaultSettings,
-  ...data,
-  freeShippingThreshold: Number(
-    data.freeShippingThreshold ?? defaultSettings.freeShippingThreshold
-  ),
-});
+const normalizeHeroSlides = (slides, fallback) => {
+  const source = Array.isArray(slides) && slides.length ? slides : fallback;
+
+  return source
+    .slice(0, 3)
+    .map((slide, index) => ({
+      id: String(slide?.id || `hero-slide-${index + 1}`),
+      imageUrl: String(slide?.imageUrl || fallback[0]?.imageUrl || "").trim(),
+      title: String(slide?.title || fallback[0]?.title || "Hero Slide").trim(),
+      subtitle: String(slide?.subtitle || fallback[0]?.subtitle || "").trim(),
+      buttonText: String(slide?.buttonText || "Shop Now").trim(),
+      buttonLink: String(slide?.buttonLink || "/shop").trim() || "/shop",
+      displayOrder: Number.isFinite(Number(slide?.displayOrder)) ? Number(slide.displayOrder) : index + 1,
+      status: String(slide?.status || "active").toLowerCase() === "inactive" ? "inactive" : "active",
+    }))
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .map((slide, index) => ({ ...slide, displayOrder: index + 1 }));
+};
+
+const normalizeSettings = (data = {}) => {
+  const merged = {
+    ...defaultSettings,
+    ...data,
+    freeShippingThreshold: Number(
+      data.freeShippingThreshold ?? defaultSettings.freeShippingThreshold
+    ),
+  };
+
+  const legacyFallbackSlides = [
+    {
+      id: "hero-slide-1",
+      imageUrl: merged.heroImage || defaultSettings.heroImage,
+      title: merged.heroTitle || defaultSettings.heroTitle,
+      subtitle: merged.heroSubtitle || defaultSettings.heroSubtitle,
+      buttonText: merged.heroPrimaryButtonText || defaultSettings.heroPrimaryButtonText,
+      buttonLink: merged.heroPrimaryButtonLink || defaultSettings.heroPrimaryButtonLink,
+      displayOrder: 1,
+      status: "active",
+    },
+  ];
+
+  const heroSlides = normalizeHeroSlides(merged.heroSlides, legacyFallbackSlides);
+  const primarySlide = heroSlides.find((slide) => slide.status === "active") || heroSlides[0];
+
+  return {
+    ...merged,
+    heroSlides,
+    heroImage: primarySlide?.imageUrl || merged.heroImage,
+    heroTitle: primarySlide?.title || merged.heroTitle,
+    heroSubtitle: primarySlide?.subtitle || merged.heroSubtitle,
+    heroPrimaryButtonText: primarySlide?.buttonText || merged.heroPrimaryButtonText,
+    heroPrimaryButtonLink: primarySlide?.buttonLink || merged.heroPrimaryButtonLink,
+  };
+};
 
 export const getSettings = async () => {
   const data = await safeRequest(() => get("/admin/settings"), defaultSettings);
@@ -45,9 +106,10 @@ export const saveSettings = async (payload) => {
   return next;
 };
 
-export const uploadHeroImage = async (file) => {
+export const uploadHeroImage = async (file, slideIndex = 0) => {
   const formData = new FormData();
   formData.append("heroImage", file);
+  formData.append("slideIndex", String(slideIndex));
 
   const response = await post("/admin/settings/hero-image", formData);
   const payload = response?.data ?? response;

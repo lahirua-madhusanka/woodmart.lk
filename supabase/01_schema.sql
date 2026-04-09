@@ -662,6 +662,7 @@ create table if not exists public.store_settings (
   hero_secondary_button_text text not null default 'View Collection',
   hero_secondary_button_link text not null default '/shop',
   hero_image_url text not null default 'https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80',
+  hero_slides jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   check (id)
@@ -679,6 +680,7 @@ alter table public.store_settings add column if not exists hero_primary_button_l
 alter table public.store_settings add column if not exists hero_secondary_button_text text not null default 'View Collection';
 alter table public.store_settings add column if not exists hero_secondary_button_link text not null default '/shop';
 alter table public.store_settings add column if not exists hero_image_url text not null default 'https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80';
+alter table public.store_settings add column if not exists hero_slides jsonb;
 
 drop trigger if exists trg_store_settings_updated_at on public.store_settings;
 create trigger trg_store_settings_updated_at

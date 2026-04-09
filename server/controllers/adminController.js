@@ -38,6 +38,56 @@ const defaultStoreSettings = {
     "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80",
 };
 
+const MAX_HERO_SLIDES = 3;
+
+const getDefaultHeroSlides = () => [
+  {
+    id: "hero-slide-1",
+    imageUrl: defaultStoreSettings.heroImage,
+    title: defaultStoreSettings.heroTitle,
+    subtitle: defaultStoreSettings.heroSubtitle,
+    buttonText: defaultStoreSettings.heroPrimaryButtonText,
+    buttonLink: defaultStoreSettings.heroPrimaryButtonLink,
+    displayOrder: 1,
+    status: "active",
+  },
+];
+
+const normalizeHeroSlideStatus = (value) =>
+  String(value || "active").toLowerCase() === "inactive" ? "inactive" : "active";
+
+const normalizeHeroSlides = (value, fallbackSlides = getDefaultHeroSlides()) => {
+  const source = Array.isArray(value) ? value : fallbackSlides;
+
+  const normalized = source
+    .slice(0, MAX_HERO_SLIDES)
+    .map((slide, index) => ({
+      id: String(slide?.id || `hero-slide-${index + 1}`),
+      imageUrl: String(slide?.imageUrl || "").trim(),
+      title: String(slide?.title || "").trim(),
+      subtitle: String(slide?.subtitle || "").trim(),
+      buttonText: String(slide?.buttonText || "").trim(),
+      buttonLink: String(slide?.buttonLink || "/shop").trim() || "/shop",
+      displayOrder: Number.isFinite(Number(slide?.displayOrder)) ? Number(slide.displayOrder) : index + 1,
+      status: normalizeHeroSlideStatus(slide?.status),
+    }))
+    .sort((a, b) => a.displayOrder - b.displayOrder)
+    .map((slide, index) => ({
+      ...slide,
+      displayOrder: index + 1,
+      title: slide.title || `Hero Slide ${index + 1}`,
+      subtitle: slide.subtitle || defaultStoreSettings.heroSubtitle,
+      buttonText: slide.buttonText || "Shop Now",
+      imageUrl: slide.imageUrl || fallbackSlides[0]?.imageUrl || defaultStoreSettings.heroImage,
+    }));
+
+  if (!normalized.length) {
+    return fallbackSlides;
+  }
+
+  return normalized;
+};
+
 const isMissingRelationError = (message = "") => {
   const normalized = String(message).toLowerCase();
   return normalized.includes("could not find") && (normalized.includes("relation") || normalized.includes("table"));
@@ -45,7 +95,12 @@ const isMissingRelationError = (message = "") => {
 
 const isMissingColumnError = (message = "") => {
   const normalized = String(message).toLowerCase();
-  return normalized.includes("column") && normalized.includes("does not exist");
+  return (
+    (normalized.includes("column") && normalized.includes("does not exist")) ||
+    (normalized.includes("could not find") &&
+      normalized.includes("column") &&
+      normalized.includes("schema cache"))
+  );
 };
 
 const isPermissionError = (message = "") => {
@@ -125,31 +180,46 @@ const buildDateRange = ({ period = "month", startDate, endDate }) => {
 
 const orderNumber = (value) => Number(value || 0);
 
-const mapStoreSettings = (row = {}) => ({
-  storeName: row.store_name ?? defaultStoreSettings.storeName,
-  supportEmail: row.support_email ?? row.admin_email ?? defaultStoreSettings.supportEmail,
-  contactNumber: row.contact_number ?? defaultStoreSettings.contactNumber,
-  storeAddress: row.store_address ?? defaultStoreSettings.storeAddress,
-  businessHours: row.business_hours ?? defaultStoreSettings.businessHours,
-  supportNote: row.support_note ?? defaultStoreSettings.supportNote,
-  contactImageUrl: row.contact_image_url ?? defaultStoreSettings.contactImageUrl,
-  currency: row.currency ?? defaultStoreSettings.currency,
-  freeShippingThreshold: Number(
-    row.free_shipping_threshold ?? defaultStoreSettings.freeShippingThreshold
-  ),
-  themeAccent: row.theme_accent ?? defaultStoreSettings.themeAccent,
-  heroTitle: row.hero_title ?? defaultStoreSettings.heroTitle,
-  heroSubtitle: row.hero_subtitle ?? defaultStoreSettings.heroSubtitle,
-  heroPrimaryButtonText:
-    row.hero_primary_button_text ?? defaultStoreSettings.heroPrimaryButtonText,
-  heroPrimaryButtonLink:
-    row.hero_primary_button_link ?? defaultStoreSettings.heroPrimaryButtonLink,
-  heroSecondaryButtonText:
-    row.hero_secondary_button_text ?? defaultStoreSettings.heroSecondaryButtonText,
-  heroSecondaryButtonLink:
-    row.hero_secondary_button_link ?? defaultStoreSettings.heroSecondaryButtonLink,
-  heroImage: row.hero_image_url ?? defaultStoreSettings.heroImage,
-});
+const mapStoreSettings = (row = {}) => {
+  const fallbackSlides = getDefaultHeroSlides();
+  const legacySlide = {
+    id: "hero-slide-1",
+    imageUrl: row.hero_image_url ?? defaultStoreSettings.heroImage,
+    title: row.hero_title ?? defaultStoreSettings.heroTitle,
+    subtitle: row.hero_subtitle ?? defaultStoreSettings.heroSubtitle,
+    buttonText: row.hero_primary_button_text ?? defaultStoreSettings.heroPrimaryButtonText,
+    buttonLink: row.hero_primary_button_link ?? defaultStoreSettings.heroPrimaryButtonLink,
+    displayOrder: 1,
+    status: "active",
+  };
+  const heroSlides = normalizeHeroSlides(row.hero_slides, [legacySlide]);
+  const primarySlide = heroSlides.find((slide) => slide.status === "active") || heroSlides[0] || legacySlide;
+
+  return {
+    storeName: row.store_name ?? defaultStoreSettings.storeName,
+    supportEmail: row.support_email ?? row.admin_email ?? defaultStoreSettings.supportEmail,
+    contactNumber: row.contact_number ?? defaultStoreSettings.contactNumber,
+    storeAddress: row.store_address ?? defaultStoreSettings.storeAddress,
+    businessHours: row.business_hours ?? defaultStoreSettings.businessHours,
+    supportNote: row.support_note ?? defaultStoreSettings.supportNote,
+    contactImageUrl: row.contact_image_url ?? defaultStoreSettings.contactImageUrl,
+    currency: row.currency ?? defaultStoreSettings.currency,
+    freeShippingThreshold: Number(
+      row.free_shipping_threshold ?? defaultStoreSettings.freeShippingThreshold
+    ),
+    themeAccent: row.theme_accent ?? defaultStoreSettings.themeAccent,
+    heroSlides,
+    heroTitle: primarySlide.title,
+    heroSubtitle: primarySlide.subtitle,
+    heroPrimaryButtonText: primarySlide.buttonText,
+    heroPrimaryButtonLink: primarySlide.buttonLink,
+    heroSecondaryButtonText:
+      row.hero_secondary_button_text ?? defaultStoreSettings.heroSecondaryButtonText,
+    heroSecondaryButtonLink:
+      row.hero_secondary_button_link ?? defaultStoreSettings.heroSecondaryButtonLink,
+    heroImage: primarySlide.imageUrl,
+  };
+};
 
 const normalizeNumericSetting = (value, fallback) => {
   const normalized = Number(value);
@@ -188,39 +258,86 @@ const ensureStorefrontAssetsBucket = async () => {
   }
 };
 
-const buildStoreSettingsPayload = (body = {}) => ({
-  id: true,
-  store_name: String(body.storeName ?? defaultStoreSettings.storeName).trim() || defaultStoreSettings.storeName,
-  support_email: String(body.supportEmail ?? "").trim() || null,
-  contact_number: String(body.contactNumber ?? "").trim() || null,
-  store_address: String(body.storeAddress ?? "").trim() || null,
-  business_hours: String(body.businessHours ?? defaultStoreSettings.businessHours).trim() || defaultStoreSettings.businessHours,
-  support_note: String(body.supportNote ?? defaultStoreSettings.supportNote).trim() || defaultStoreSettings.supportNote,
-  contact_image_url:
-    String(body.contactImageUrl ?? defaultStoreSettings.contactImageUrl).trim() || defaultStoreSettings.contactImageUrl,
-  currency: String(body.currency ?? defaultStoreSettings.currency).trim() || defaultStoreSettings.currency,
-  free_shipping_threshold: Math.max(
-    0,
-    normalizeNumericSetting(body.freeShippingThreshold, defaultStoreSettings.freeShippingThreshold)
-  ),
-  theme_accent: String(body.themeAccent ?? defaultStoreSettings.themeAccent).trim() || defaultStoreSettings.themeAccent,
-  hero_title: String(body.heroTitle ?? defaultStoreSettings.heroTitle).trim() || defaultStoreSettings.heroTitle,
-  hero_subtitle:
-    String(body.heroSubtitle ?? defaultStoreSettings.heroSubtitle).trim() || defaultStoreSettings.heroSubtitle,
-  hero_primary_button_text:
-    String(body.heroPrimaryButtonText ?? defaultStoreSettings.heroPrimaryButtonText).trim() ||
-    defaultStoreSettings.heroPrimaryButtonText,
-  hero_primary_button_link:
-    String(body.heroPrimaryButtonLink ?? defaultStoreSettings.heroPrimaryButtonLink).trim() ||
-    defaultStoreSettings.heroPrimaryButtonLink,
-  hero_secondary_button_text:
-    String(body.heroSecondaryButtonText ?? defaultStoreSettings.heroSecondaryButtonText).trim() ||
-    defaultStoreSettings.heroSecondaryButtonText,
-  hero_secondary_button_link:
-    String(body.heroSecondaryButtonLink ?? defaultStoreSettings.heroSecondaryButtonLink).trim() ||
-    defaultStoreSettings.heroSecondaryButtonLink,
-  hero_image_url: String(body.heroImage ?? defaultStoreSettings.heroImage).trim() || defaultStoreSettings.heroImage,
-});
+const buildStoreSettingsPayload = (body = {}) => {
+  const fallbackSlides = normalizeHeroSlides(
+    [
+      {
+        id: "hero-slide-1",
+        imageUrl: String(body.heroImage ?? defaultStoreSettings.heroImage).trim() || defaultStoreSettings.heroImage,
+        title: String(body.heroTitle ?? defaultStoreSettings.heroTitle).trim() || defaultStoreSettings.heroTitle,
+        subtitle:
+          String(body.heroSubtitle ?? defaultStoreSettings.heroSubtitle).trim() || defaultStoreSettings.heroSubtitle,
+        buttonText:
+          String(body.heroPrimaryButtonText ?? defaultStoreSettings.heroPrimaryButtonText).trim() ||
+          defaultStoreSettings.heroPrimaryButtonText,
+        buttonLink:
+          String(body.heroPrimaryButtonLink ?? defaultStoreSettings.heroPrimaryButtonLink).trim() ||
+          defaultStoreSettings.heroPrimaryButtonLink,
+        displayOrder: 1,
+        status: "active",
+      },
+    ],
+    getDefaultHeroSlides()
+  );
+  const heroSlides = normalizeHeroSlides(body.heroSlides, fallbackSlides);
+  const primarySlide = heroSlides.find((slide) => slide.status === "active") || heroSlides[0] || fallbackSlides[0];
+
+  return {
+    id: true,
+    store_name: String(body.storeName ?? defaultStoreSettings.storeName).trim() || defaultStoreSettings.storeName,
+    support_email: String(body.supportEmail ?? "").trim() || null,
+    contact_number: String(body.contactNumber ?? "").trim() || null,
+    store_address: String(body.storeAddress ?? "").trim() || null,
+    business_hours:
+      String(body.businessHours ?? defaultStoreSettings.businessHours).trim() ||
+      defaultStoreSettings.businessHours,
+    support_note:
+      String(body.supportNote ?? defaultStoreSettings.supportNote).trim() || defaultStoreSettings.supportNote,
+    contact_image_url:
+      String(body.contactImageUrl ?? defaultStoreSettings.contactImageUrl).trim() ||
+      defaultStoreSettings.contactImageUrl,
+    currency: String(body.currency ?? defaultStoreSettings.currency).trim() || defaultStoreSettings.currency,
+    free_shipping_threshold: Math.max(
+      0,
+      normalizeNumericSetting(body.freeShippingThreshold, defaultStoreSettings.freeShippingThreshold)
+    ),
+    theme_accent:
+      String(body.themeAccent ?? defaultStoreSettings.themeAccent).trim() || defaultStoreSettings.themeAccent,
+    hero_title: primarySlide.title,
+    hero_subtitle: primarySlide.subtitle,
+    hero_primary_button_text: primarySlide.buttonText,
+    hero_primary_button_link: primarySlide.buttonLink,
+    hero_secondary_button_text:
+      String(body.heroSecondaryButtonText ?? defaultStoreSettings.heroSecondaryButtonText).trim() ||
+      defaultStoreSettings.heroSecondaryButtonText,
+    hero_secondary_button_link:
+      String(body.heroSecondaryButtonLink ?? defaultStoreSettings.heroSecondaryButtonLink).trim() ||
+      defaultStoreSettings.heroSecondaryButtonLink,
+    hero_image_url: primarySlide.imageUrl,
+    hero_slides: heroSlides,
+  };
+};
+
+const upsertStoreSettings = async (payload) => {
+  let { data, error } = await supabase
+    .from("store_settings")
+    .upsert(payload, { onConflict: "id" })
+    .select(settingsSelect)
+    .single();
+
+  if (error && isMissingColumnError(error.message) && Object.prototype.hasOwnProperty.call(payload, "hero_slides")) {
+    const legacyPayload = { ...payload };
+    delete legacyPayload.hero_slides;
+
+    ({ data, error } = await supabase
+      .from("store_settings")
+      .upsert(legacyPayload, { onConflict: "id" })
+      .select(settingsSelect)
+      .single());
+  }
+
+  return { data, error };
+};
 
 export const getAdminSettings = asyncHandler(async (req, res) => {
   const { data, error } = await supabase
@@ -239,11 +356,7 @@ export const getAdminSettings = asyncHandler(async (req, res) => {
 
   if (!data) {
     const payload = buildStoreSettingsPayload(defaultStoreSettings);
-    const { data: created, error: createError } = await supabase
-      .from("store_settings")
-      .upsert(payload, { onConflict: "id" })
-      .select(settingsSelect)
-      .single();
+    const { data: created, error: createError } = await upsertStoreSettings(payload);
 
     if (createError || !created) {
       res.status(500);
@@ -259,11 +372,7 @@ export const getAdminSettings = asyncHandler(async (req, res) => {
 export const updateAdminSettings = asyncHandler(async (req, res) => {
   const payload = buildStoreSettingsPayload(req.body);
 
-  const { data, error } = await supabase
-    .from("store_settings")
-    .upsert(payload, { onConflict: "id" })
-    .select(settingsSelect)
-    .single();
+  const { data, error } = await upsertStoreSettings(payload);
 
   if (error) {
     if (isMissingRelationError(error.message)) {
@@ -316,16 +425,47 @@ export const uploadAdminHeroImage = asyncHandler(async (req, res) => {
     data: { publicUrl },
   } = supabase.storage.from(STOREFRONT_ASSETS_BUCKET).getPublicUrl(filePath);
 
+  const requestedIndex = Number(req.body?.slideIndex);
+  const slideIndex = Number.isInteger(requestedIndex)
+    ? Math.max(0, Math.min(MAX_HERO_SLIDES - 1, requestedIndex))
+    : 0;
+
+  const { data: existingSettingsRow } = await supabase
+    .from("store_settings")
+    .select(settingsSelect)
+    .eq("id", true)
+    .maybeSingle();
+
+  const existingSettings = existingSettingsRow
+    ? mapStoreSettings(existingSettingsRow)
+    : { ...defaultStoreSettings, heroSlides: getDefaultHeroSlides() };
+
+  const nextSlides = normalizeHeroSlides(existingSettings.heroSlides, getDefaultHeroSlides());
+  while (nextSlides.length <= slideIndex && nextSlides.length < MAX_HERO_SLIDES) {
+    nextSlides.push({
+      id: `hero-slide-${nextSlides.length + 1}`,
+      imageUrl: defaultStoreSettings.heroImage,
+      title: defaultStoreSettings.heroTitle,
+      subtitle: defaultStoreSettings.heroSubtitle,
+      buttonText: defaultStoreSettings.heroPrimaryButtonText,
+      buttonLink: defaultStoreSettings.heroPrimaryButtonLink,
+      displayOrder: nextSlides.length + 1,
+      status: "inactive",
+    });
+  }
+
+  nextSlides[slideIndex] = {
+    ...(nextSlides[slideIndex] || getDefaultHeroSlides()[0]),
+    imageUrl: publicUrl,
+    displayOrder: slideIndex + 1,
+  };
+
   const payload = buildStoreSettingsPayload({
-    ...defaultStoreSettings,
-    heroImage: publicUrl,
+    ...existingSettings,
+    heroSlides: nextSlides,
   });
 
-  const { data, error } = await supabase
-    .from("store_settings")
-    .upsert(payload, { onConflict: "id" })
-    .select(settingsSelect)
-    .single();
+  const { data, error } = await upsertStoreSettings(payload);
 
   if (error) {
     res.status(500);
@@ -333,7 +473,7 @@ export const uploadAdminHeroImage = asyncHandler(async (req, res) => {
   }
 
   return res.json({
-    message: "Hero image uploaded successfully",
+    message: `Hero image uploaded successfully for slide ${slideIndex + 1}`,
     heroImage: publicUrl,
     settings: mapStoreSettings(data),
   });

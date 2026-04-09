@@ -40,6 +40,14 @@ function StorefrontBannerSection({ section, columns = 2, containerClassName = ""
   const [banners, setBanners] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const getLayoutClassName = (count) => {
+    if (columns === 1) return "grid-cols-1";
+    if (count <= 1) return "grid-cols-1";
+    if (count === 2) return "grid-cols-1 md:grid-cols-2";
+    if (count === 3) return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
+    return "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
+  };
+
   useEffect(() => {
     let ignore = false;
 
@@ -81,9 +89,11 @@ function StorefrontBannerSection({ section, columns = 2, containerClassName = ""
     return null;
   }
 
+  const layoutClassName = getLayoutClassName(banners.length);
+
   return (
     <section className={containerClassName}>
-      <div className={`grid gap-4 ${columns === 1 ? "grid-cols-1" : "lg:grid-cols-2"}`}>
+      <div className={`grid gap-4 ${layoutClassName}`}>
         {banners.map((banner) => (
           <article key={banner.id} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">
             <img
