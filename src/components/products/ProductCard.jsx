@@ -93,7 +93,7 @@ function ProductCard({ product }) {
           )}
         </div>
 
-        <div className="flex items-center gap-2 pt-1">
+        <div className="pt-1">
           <button
             onMouseEnter={prefetchCart}
             onFocus={prefetchCart}
@@ -101,18 +101,10 @@ function ProductCard({ product }) {
               prefetchCart();
               addToCart(productId, 1);
             }}
-            className="btn-primary w-full gap-2 py-2.5"
+            className="btn-primary w-full justify-center gap-2 py-2.5"
           >
             <ShoppingCart size={15} /> Add to Cart
           </button>
-          <RoutePrefetchLink
-            to={`/product/${productId}`}
-            routeKey="productDetails"
-            className="rounded-lg border border-slate-300 px-3 py-2.5 text-sm font-semibold text-slate-700 transition hover:border-brand hover:text-brand"
-            {...detailsPrefetch}
-          >
-            View
-          </RoutePrefetchLink>
         </div>
       </div>
     </motion.article>

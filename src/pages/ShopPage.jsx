@@ -34,7 +34,6 @@ function ShopPage() {
       try {
         const data = await getProductsApi({
           category: urlCategory || undefined,
-          q: urlQuery || undefined,
         });
 
         if (!ignore) {
@@ -82,8 +81,10 @@ function ShopPage() {
       .filter((item) => item.rating >= minRating)
       .filter((item) =>
         lowered
-          ? item.name.toLowerCase().includes(lowered) ||
-            item.tags.join(" ").toLowerCase().includes(lowered)
+          ? [item.name, item.category, item.description, Array.isArray(item.tags) ? item.tags.join(" ") : ""]
+              .join(" ")
+              .toLowerCase()
+              .includes(lowered)
           : true
       );
 
@@ -117,7 +118,6 @@ function ShopPage() {
   const onSearchChange = (value) => {
     setSearch(value);
     setVisibleCount(6);
-    updateQueryParam("q", value.trim());
   };
 
   return (
@@ -141,8 +141,14 @@ function ShopPage() {
             <span className="flex items-center rounded-lg border border-slate-300 px-3 py-2">
               <Search size={15} className="text-muted" />
               <input
+                type="search"
                 value={search}
                 onChange={(event) => onSearchChange(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                  }
+                }}
                 placeholder="Find products"
                 className="ml-2 w-full text-sm outline-none"
               />
