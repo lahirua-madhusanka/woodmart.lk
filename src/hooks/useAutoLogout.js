@@ -8,7 +8,6 @@ export default function useAutoLogout({
   warningBeforeMs = 0,
   onIdleTimeout,
   onWarning,
-  onBeforeUnload,
   activityEvents = DEFAULT_ACTIVITY_EVENTS,
 }) {
   const idleTimerRef = useRef(null);
@@ -70,21 +69,4 @@ export default function useAutoLogout({
     };
   }, [activityEvents, clearTimers, enabled, resetTimers]);
 
-  useEffect(() => {
-    if (!enabled || typeof onBeforeUnload !== "function") {
-      return undefined;
-    }
-
-    const handleBeforeUnload = () => {
-      onBeforeUnload();
-    };
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    window.addEventListener("pagehide", handleBeforeUnload);
-
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
-      window.removeEventListener("pagehide", handleBeforeUnload);
-    };
-  }, [enabled, onBeforeUnload]);
 }

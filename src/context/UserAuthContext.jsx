@@ -148,7 +148,6 @@ export function UserAuthProvider({ children }) {
     warningBeforeMs: IDLE_WARNING_MS,
     onIdleTimeout: handleIdleLogout,
     onWarning: handleIdleWarning,
-    onBeforeUnload: clearUserStorage,
   });
 
   const updateProfile = async (payload) => {

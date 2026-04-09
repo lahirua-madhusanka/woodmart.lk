@@ -105,7 +105,6 @@ export function AdminAuthProvider({ children }) {
     warningBeforeMs: IDLE_WARNING_MS,
     onIdleTimeout: handleIdleLogout,
     onWarning: handleIdleWarning,
-    onBeforeUnload: clearAdminStorage,
   });
 
   const refreshProfile = async () => {
