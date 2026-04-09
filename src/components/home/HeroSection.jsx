@@ -95,9 +95,9 @@ function HeroSection() {
   };
 
   const floatingControlMotion = {
-    y: [0, -1.5, 0],
+    y: [0, -1.2, 0],
     transition: {
-      duration: 4.2,
+      duration: 5.2,
       repeat: Infinity,
       ease: "easeInOut",
     },
@@ -120,10 +120,10 @@ function HeroSection() {
             loading="eager"
             fetchPriority="high"
             decoding="async"
-            initial={{ opacity: 0.35, scale: 1.015 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0.35, scale: 1.01 }}
-            transition={{ duration: 0.7, ease: "easeOut" }}
+            initial={{ opacity: 0.15, scale: 1.08, x: 8 }}
+            animate={{ opacity: 1, scale: 1, x: 0 }}
+            exit={{ opacity: 0.15, scale: 1.04, x: -8 }}
+            transition={{ duration: 1.05, ease: [0.22, 1, 0.36, 1] }}
             className="absolute inset-0 h-full w-full object-cover"
             onError={(event) => {
               event.currentTarget.src = DEFAULT_HERO_IMAGE;
@@ -131,41 +131,47 @@ function HeroSection() {
           />
         </AnimatePresence>
 
-        <div className="absolute inset-0 bg-gradient-to-r from-slate-950/72 via-slate-900/40 to-slate-950/12" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.1),transparent_42%),linear-gradient(180deg,transparent_26%,rgba(0,0,0,0.16)_100%),linear-gradient(90deg,rgba(255,255,255,0.03),transparent_34%,rgba(0,0,0,0.06))]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-[#2e241a]/64 via-[#3f3122]/36 to-[#70553b]/10" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(255,245,231,0.22),transparent_44%),linear-gradient(180deg,transparent_34%,rgba(33,23,15,0.2)_100%)]" />
 
-        <div className="relative flex min-h-[420px] items-center px-4 py-10 sm:min-h-[500px] sm:px-7 md:min-h-[560px] md:px-10 md:py-12 lg:min-h-[620px] lg:px-12 lg:py-14">
+        <div className="relative flex min-h-[410px] items-center px-4 py-9 sm:min-h-[500px] sm:px-7 md:min-h-[560px] md:px-10 md:py-12 lg:min-h-[610px] lg:px-12 lg:py-14">
           <motion.div
             key={`content-${activeSlide.id}`}
-            initial={{ opacity: 0, y: 18 }}
+            initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.45, ease: "easeOut" }}
-            className="max-w-[36rem] space-y-3.5 rounded-[1.2rem] border border-white/8 bg-slate-950/14 p-4 shadow-[0_10px_28px_rgba(15,23,42,0.12)] backdrop-blur-[6px] sm:space-y-4 sm:p-5 md:p-5.5"
+            transition={{ duration: 0.72, ease: [0.22, 1, 0.36, 1] }}
+            className="max-w-[33rem] space-y-4 rounded-[1.1rem] border border-[#f0dfc9]/55 bg-[#f8f0e4]/58 p-4 shadow-[0_12px_28px_rgba(40,29,18,0.12)] backdrop-blur-[2px] sm:space-y-4.5 sm:p-5 md:max-w-[34rem] md:p-6"
           >
-            <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/6 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/78 shadow-sm backdrop-blur-sm sm:px-3 sm:text-[11px]">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-[#d8bc99]/65 bg-[#fcf4e8]/78 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-[#6f5338] shadow-sm sm:px-3 sm:text-[10px]">
               <BadgePercent size={14} /> New Season Offer up to 35% Off
             </span>
 
-            <h1 className="max-w-3xl font-display text-[clamp(1.7rem,3.8vw,3.4rem)] font-semibold leading-[1.06] tracking-[-0.025em] text-[#fff8ef] drop-shadow-[0_2px_14px_rgba(0,0,0,0.28)]">
+            <h1 className="max-w-3xl font-display text-[clamp(1.6rem,3.6vw,3.15rem)] font-semibold leading-[1.08] tracking-[-0.02em] text-[#2f2318]">
               {activeSlide.title}
             </h1>
 
-            <p className="max-w-2xl rounded-2xl border border-white/8 bg-white/6 px-4 py-3 text-[0.93rem] font-normal leading-relaxed text-white/84 shadow-sm backdrop-blur-sm sm:px-5 sm:py-4 md:text-base">
+            <p className="max-w-2xl rounded-xl border border-[#eddcc6]/70 bg-[#fff8ef]/66 px-4 py-3 text-[0.92rem] font-normal leading-relaxed text-[#5f4b3a] sm:px-5 sm:py-3.5 md:text-[0.97rem]">
               {activeSlide.subtitle}
             </p>
 
-            <div className="flex flex-wrap items-center gap-2 pt-1 sm:gap-2.5">
+            <div className="flex flex-wrap items-center gap-2.5 pt-0.5 sm:gap-3">
               <RoutePrefetchLink
                 routeKey="shop"
                 to={activeSlide.buttonLink || "/shop"}
-                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-brand/16 transition duration-300 hover:scale-[1.01] hover:bg-brand-dark hover:shadow-brand/22 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                className="inline-flex min-h-10 items-center gap-2 rounded-full bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-[0_8px_18px_rgba(9,89,164,0.2)] transition duration-300 hover:bg-brand-dark hover:shadow-[0_10px_20px_rgba(9,89,164,0.24)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2f2318]/35 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
               >
                 {activeSlide.buttonText || "Shop Now"} <ArrowRight size={16} />
               </RoutePrefetchLink>
 
-              <span className="hidden rounded-full border border-white/8 bg-white/5 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/64 backdrop-blur-sm sm:inline-flex">
-                Premium collection
-              </span>
+              {settings.heroSecondaryButtonText ? (
+                <RoutePrefetchLink
+                  routeKey="shop"
+                  to={settings.heroSecondaryButtonLink || "/shop"}
+                  className="inline-flex min-h-10 items-center rounded-full border border-[#caae8a] bg-[#f9efe2]/72 px-4 py-2.5 text-sm font-medium text-[#5f4b3a] transition duration-300 hover:border-[#ba9a75] hover:bg-[#f7ead9]"
+                >
+                  {settings.heroSecondaryButtonText}
+                </RoutePrefetchLink>
+              ) : null}
             </div>
           </motion.div>
 
@@ -176,9 +182,9 @@ function HeroSection() {
                 onClick={goPrev}
                 aria-label="Previous hero slide"
                 animate={floatingControlMotion}
-                whileHover={{ scale: 1.08 }}
+                whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.96 }}
-                className="absolute left-3 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/8 bg-white/6 text-white/82 shadow-sm shadow-slate-950/12 backdrop-blur-sm transition duration-300 hover:bg-white/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                className="absolute left-3 top-1/2 inline-flex h-8.5 w-8.5 -translate-y-1/2 items-center justify-center rounded-full border border-[#f0dfc9]/72 bg-[#f9efe3]/78 text-[#5f4b3a] shadow-[0_6px_14px_rgba(40,29,18,0.12)] transition duration-300 hover:bg-[#fff5ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2f2318]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
               >
                 <ChevronLeft size={15} />
               </motion.button>
@@ -187,14 +193,14 @@ function HeroSection() {
                 onClick={goNext}
                 aria-label="Next hero slide"
                 animate={{ ...floatingControlMotion, y: [0, 2, 0] }}
-                whileHover={{ scale: 1.08 }}
+                whileHover={{ scale: 1.06 }}
                 whileTap={{ scale: 0.96 }}
-                className="absolute right-3 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full border border-white/8 bg-white/6 text-white/82 shadow-sm shadow-slate-950/12 backdrop-blur-sm transition duration-300 hover:bg-white/12 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
+                className="absolute right-3 top-1/2 inline-flex h-8.5 w-8.5 -translate-y-1/2 items-center justify-center rounded-full border border-[#f0dfc9]/72 bg-[#f9efe3]/78 text-[#5f4b3a] shadow-[0_6px_14px_rgba(40,29,18,0.12)] transition duration-300 hover:bg-[#fff5ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#2f2318]/30 focus-visible:ring-offset-2 focus-visible:ring-offset-transparent"
               >
                 <ChevronRight size={15} />
               </motion.button>
 
-              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-white/8 bg-white/6 px-2.5 py-1.5 shadow-[0_6px_18px_rgba(15,23,42,0.1)] backdrop-blur-sm">
+              <div className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-[#f0dfc9]/70 bg-[#f9efe3]/72 px-2.5 py-1.5 shadow-[0_6px_16px_rgba(40,29,18,0.1)]">
                 {slides.map((slide, index) => (
                   <button
                     key={slide.id}
@@ -203,14 +209,14 @@ function HeroSection() {
                     onClick={() => setActiveIndex(index)}
                     className={`h-2 rounded-full transition-all duration-300 ${
                       index === activeIndex
-                        ? "w-6.5 bg-white shadow-[0_0_0_3px_rgba(255,255,255,0.06)]"
-                        : "w-2 bg-white/40 hover:bg-white/65"
+                        ? "w-6.5 bg-[#8f6d4b]"
+                        : "w-2 bg-[#cbb59c] hover:bg-[#b29677]"
                     }`}
                   />
                 ))}
               </div>
 
-              <div className="absolute right-4 top-4 rounded-full border border-white/8 bg-white/6 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/72 shadow-[0_6px_16px_rgba(15,23,42,0.1)] backdrop-blur-sm">
+              <div className="absolute right-4 top-4 rounded-full border border-[#f0dfc9]/70 bg-[#f9efe3]/72 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#6f543a] shadow-[0_5px_14px_rgba(40,29,18,0.1)]">
                 {String(activeIndex + 1).padStart(2, "0")} / {String(slides.length).padStart(2, "0")}
               </div>
             </>
