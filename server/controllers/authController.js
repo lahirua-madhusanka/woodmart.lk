@@ -23,6 +23,19 @@ const getDefaultNameFromEmail = (email) => {
 const hashVerificationToken = (token) =>
   crypto.createHash("sha256").update(String(token)).digest("hex");
 
+const normalizeBaseUrl = (value) => String(value || "").trim().replace(/\/+$/, "");
+
+const getClientBaseUrl = (req) => {
+  const allowedOrigins = new Set([env.clientUrl, ...env.clientUrls].map(normalizeBaseUrl).filter(Boolean));
+  const requestOrigin = normalizeBaseUrl(req?.headers?.origin || req?.get?.("origin") || "");
+
+  if (requestOrigin && allowedOrigins.has(requestOrigin)) {
+    return requestOrigin;
+  }
+
+  return normalizeBaseUrl(env.clientUrl);
+};
+
 const createVerificationToken = () => {
   const token = crypto.randomBytes(32).toString("hex");
   const tokenHash = hashVerificationToken(token);
@@ -34,11 +47,11 @@ const createVerificationToken = () => {
   };
 };
 
-const buildVerificationUrl = (token) =>
-  `${String(env.clientUrl || "").replace(/\/+$/, "")}/?action=verify-email&token=${encodeURIComponent(token)}`;
+const buildVerificationUrl = (req, token) =>
+  `${getClientBaseUrl(req)}/verify-email?token=${encodeURIComponent(token)}`;
 
-const buildPasswordResetUrl = (token) =>
-  `${String(env.clientUrl || "").replace(/\/+$/, "")}/?action=reset-password&token=${encodeURIComponent(token)}`;
+const buildPasswordResetUrl = (req, token) =>
+  `${getClientBaseUrl(req)}/reset-password?token=${encodeURIComponent(token)}`;
 
 const isStrongPassword = (password) => {
   const value = String(password || "");
@@ -84,14 +97,31 @@ const persistVerificationToken = async ({ userId, tokenHash, expiresAt }) => {
   }
 };
 
-const sendVerificationToUser = async ({ userId, email, name }) => {
+const sendVerificationToUser = async ({ req, userId, email, name, background = false }) => {
   const { token, tokenHash, expiresAt } = createVerificationToken();
   await persistVerificationToken({ userId, tokenHash, expiresAt });
-  await sendVerificationEmail({
+  const sendTask = sendVerificationEmail({
     toEmail: email,
     name,
-    verificationUrl: buildVerificationUrl(token),
+    verificationUrl: buildVerificationUrl(req, token),
+  }).catch((error) => {
+    // eslint-disable-next-line no-console
+    console.error("[EMAIL_DEBUG] verification queue failed", {
+      email,
+      userId,
+      message: error?.message || "Unknown error",
+      statusCode: error?.statusCode || null,
+    });
+    if (!background) {
+      throw error;
+    }
   });
+
+  if (!background) {
+    await sendTask;
+  }
+
+  return { token };
 };
 
 const setAuthCookie = (res, token) => {
@@ -155,15 +185,17 @@ export const registerUser = asyncHandler(async (req, res) => {
     throw new Error(createError?.message || "Failed to register user");
   }
 
-  let emailSent = true;
+  let emailQueued = true;
   try {
     await sendVerificationToUser({
+      req,
       userId: createdUser.id,
       email: createdUser.email,
       name: createdUser.name,
+      background: true,
     });
   } catch (error) {
-    emailSent = false;
+    emailQueued = false;
     // eslint-disable-next-line no-console
     console.error("[EMAIL_DEBUG] verification send failed", {
       email: createdUser.email,
@@ -174,11 +206,11 @@ export const registerUser = asyncHandler(async (req, res) => {
   }
 
   res.status(201).json({
-    message: emailSent
-      ? "Account created. Check your email and click the verification link to verify your account."
+    message: emailQueued
+      ? "Account created. Your verification email is being sent. Please check your inbox."
       : "Account created, but verification email could not be sent. Please request a new verification email.",
     requiresVerification: true,
-    emailSent,
+    emailQueued,
     email: normalizedEmail,
     user: mapUser(createdUser),
   });
@@ -473,7 +505,7 @@ export const forgotPassword = asyncHandler(async (req, res) => {
     await sendPasswordResetEmail({
       toEmail: user.email,
       name: user.name,
-      resetUrl: buildPasswordResetUrl(token),
+      resetUrl: buildPasswordResetUrl(req, token),
     });
   } catch {
     // Intentionally return a generic response to avoid account enumeration.
@@ -743,9 +775,11 @@ export const resendVerificationEmail = asyncHandler(async (req, res) => {
 
   try {
     await sendVerificationToUser({
+      req,
       userId: user.id,
       email: user.email,
       name: user.name,
+      background: false,
     });
   } catch (error) {
     if (error?.statusCode === 429) {
