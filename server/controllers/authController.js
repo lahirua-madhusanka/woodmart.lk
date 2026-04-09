@@ -13,6 +13,8 @@ const EMAIL_VERIFICATION_TTL_HOURS = Math.max(1, Number(env.emailVerificationTtl
 const PASSWORD_RESET_TTL_HOURS = 1;
 const RESEND_COOLDOWN_MS = 60 * 1000;
 const resendGuard = new Map();
+const recentVerifiedTokens = new Map();
+const RECENT_VERIFIED_TOKEN_TTL_MS = 10 * 60 * 1000;
 
 const getDefaultNameFromEmail = (email) => {
   const [namePart] = String(email || "").split("@");
@@ -87,12 +89,16 @@ const sendVerificationToUser = async ({ req, userId, email, name, awaitDelivery 
   authLog("verification_token_saved", { userId, email, expiresAt });
 
   const verificationUrl = buildVerificationUrl(req, token);
-  const task = sendVerificationEmail({
-    toEmail: email,
-    name,
-    verificationUrl,
-    expiresInHours: EMAIL_VERIFICATION_TTL_HOURS,
-  });
+  authLog("verification_email_send_started", { userId, email });
+
+  const task = Promise.resolve().then(() =>
+    sendVerificationEmail({
+      toEmail: email,
+      name,
+      verificationUrl,
+      expiresInHours: EMAIL_VERIFICATION_TTL_HOURS,
+    })
+  );
 
   if (awaitDelivery) {
     await task;
@@ -666,6 +672,22 @@ export const verifyEmail = asyncHandler(async (req, res) => {
   }
 
   const tokenHash = hashVerificationToken(token);
+
+  for (const [cachedTokenHash, verifiedAt] of recentVerifiedTokens.entries()) {
+    if (Date.now() - verifiedAt > RECENT_VERIFIED_TOKEN_TTL_MS) {
+      recentVerifiedTokens.delete(cachedTokenHash);
+    }
+  }
+
+  if (recentVerifiedTokens.has(tokenHash)) {
+    authLog("verify_email_already_verified", { tokenHash: tokenHash.slice(0, 10) });
+    return res.json({
+      success: true,
+      status: "already_verified",
+      message: "Email already verified",
+    });
+  }
+
   const { data: tokenRow, error: tokenError } = await supabase
     .from("verification_tokens")
     .select("id, user_id, expires_at")
@@ -736,6 +758,7 @@ export const verifyEmail = asyncHandler(async (req, res) => {
   }
 
   await supabase.from("verification_tokens").delete().eq("id", tokenRow.id);
+  recentVerifiedTokens.set(tokenHash, Date.now());
   authLog("verify_email_success", { userId: user.id, tokenId: tokenRow.id });
 
   return res.json({
