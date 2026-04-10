@@ -4,6 +4,7 @@ import env from "../config/env.js";
 import supabase from "../config/supabase.js";
 import { recordCouponUsageForOrder, validateCouponForCart } from "../services/couponEngine.js";
 import { addOrderStatusHistory, autoDeliverIfDue } from "../services/orderWorkflow.js";
+import { sendOrderConfirmationEmail } from "../services/orderConfirmationEmailService.js";
 import { mapOrder } from "../utils/dbMappers.js";
 
 const stripe = env.stripeSecretKey ? new Stripe(env.stripeSecretKey) : null;
@@ -247,6 +248,20 @@ export const createOrder = asyncHandler(async (req, res) => {
     throw new Error(createOrderError?.message || "Failed to create order");
   }
 
+  // eslint-disable-next-line no-console
+  console.log(
+    "[ORDER]",
+    JSON.stringify({
+      event: "created",
+      orderId: createdOrder.id,
+      userId: req.user._id,
+      paymentMethod,
+      paymentStatus,
+      totalAmount,
+      timestamp: new Date().toISOString(),
+    })
+  );
+
   const { error: orderItemsError } = await supabase
     .from("order_items")
     .insert(orderItems.map((item) => ({ ...item, order_id: createdOrder.id })));
@@ -323,6 +338,29 @@ export const createOrder = asyncHandler(async (req, res) => {
 
   const order = await loadOrderById(createdOrder.id, true);
   res.status(201).json(order);
+
+  setImmediate(() => {
+    sendOrderConfirmationEmail({
+      ...order,
+      customerEmail: order?.userId?.email || shippingAddress?.email || "",
+      customerName: order?.userId?.name || shippingAddress?.fullName || "",
+    }).catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[ORDER_CONFIRMATION_EMAIL]",
+        JSON.stringify({
+          event: "send_failed",
+          orderId: createdOrder.id,
+          userId: req.user._id,
+          message: error?.message || "Unknown error",
+          statusCode: error?.statusCode || null,
+          providerStatus: error?.providerStatus || null,
+          providerPayload: error?.providerPayload || null,
+          timestamp: new Date().toISOString(),
+        })
+      );
+    });
+  });
 });
 
 export const getUserOrders = asyncHandler(async (req, res) => {

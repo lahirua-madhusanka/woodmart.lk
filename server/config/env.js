@@ -35,6 +35,8 @@ const env = {
   brevoApiKey: process.env.BREVO_API_KEY || "",
   brevoSenderEmail: clean(process.env.BREVO_SENDER_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER),
   brevoSenderName: clean(process.env.BREVO_SENDER_NAME || "Woodmart.lk"),
+  orderEmailBrandName: clean(process.env.ORDER_EMAIL_BRAND_NAME || process.env.BREVO_SENDER_NAME || "Woodmart.lk"),
+  orderEmailSupportEmail: clean(process.env.ORDER_EMAIL_SUPPORT_EMAIL || process.env.BREVO_SENDER_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER),
   emailVerificationTtlHours: Number(process.env.EMAIL_VERIFICATION_TTL_HOURS || 1),
   brevoNewsletterListId: Number(process.env.BREVO_NEWSLETTER_LIST_ID || 0),
 };
