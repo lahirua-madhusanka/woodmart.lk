@@ -73,6 +73,14 @@ function OrdersPage() {
                 <Link to={`/order-confirmation/${order._id}`} className="inline-flex text-sm font-semibold text-brand">
                   View details
                 </Link>
+                {String(order.orderStatus || "").toLowerCase() === "delivered" ? (
+                  <Link
+                    to={`/review?orderId=${encodeURIComponent(order._id)}`}
+                    className="rounded-lg border border-brand px-3 py-1.5 text-xs font-semibold text-brand"
+                  >
+                    Review
+                  </Link>
+                ) : null}
                 {order.trackingNumber ? (
                   <>
                     <button

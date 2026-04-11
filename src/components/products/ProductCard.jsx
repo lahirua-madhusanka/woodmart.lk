@@ -1,6 +1,7 @@
 import { memo, useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { Heart, ShoppingCart, Star } from "lucide-react";
+import { Heart, ShoppingCart } from "lucide-react";
+import StarRatingDisplay from "../common/StarRatingDisplay";
 import RoutePrefetchLink from "../common/RoutePrefetchLink";
 import { usePrefetchOnHover, usePrefetchTrigger } from "../../hooks/usePrefetchOnHover";
 import { useStorefrontSettings } from "../../context/StorefrontSettingsContext";
@@ -77,11 +78,12 @@ function ProductCard({ product }) {
           {product.name}
         </RoutePrefetchLink>
 
-        <div className="flex items-center gap-1 text-amber-500">
-          <Star size={14} fill="currentColor" />
-          <span className="text-sm font-semibold text-ink">{product.rating}</span>
-          <span className="text-xs text-muted">({reviewCount})</span>
-        </div>
+        <StarRatingDisplay
+          rating={product.rating}
+          reviewCount={reviewCount}
+          showValue
+          size={14}
+        />
 
         <div className="flex items-center gap-2">
           <span className="text-lg font-bold text-brand-dark">{formatMoney(price)}</span>

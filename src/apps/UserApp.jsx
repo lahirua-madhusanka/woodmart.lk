@@ -13,6 +13,8 @@ const WishlistPage = lazy(() => import("../pages/WishlistPage"));
 const CheckoutPage = lazy(() => import("../pages/CheckoutPage"));
 const OrdersPage = lazy(() => import("../pages/OrdersPage"));
 const OrderConfirmationPage = lazy(() => import("../pages/OrderConfirmationPage"));
+const MyReviewsPage = lazy(() => import("../pages/MyReviewsPage"));
+const ReviewPage = lazy(() => import("../pages/ReviewPage"));
 const AboutPage = lazy(() => import("../pages/AboutPage"));
 const ContactPage = lazy(() => import("../pages/ContactPage"));
 const CustomProjectPage = lazy(() => import("../pages/CustomProjectPage"));
@@ -82,6 +84,14 @@ function UserApp() {
           }
         />
         <Route
+          path="account/reviews"
+          element={
+            <PrivateRoute>
+              {withSuspense(<MyReviewsPage />, "Loading my reviews...")}
+            </PrivateRoute>
+          }
+        />
+        <Route
           path="my-inquiries"
           element={
             <PrivateRoute>
@@ -94,6 +104,14 @@ function UserApp() {
           element={
             <PrivateRoute>
               {withSuspense(<OrderConfirmationPage />, "Loading confirmation...")}
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path="review"
+          element={
+            <PrivateRoute>
+              {withSuspense(<ReviewPage />, "Loading reviews...")}
             </PrivateRoute>
           }
         />

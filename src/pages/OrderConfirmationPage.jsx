@@ -157,6 +157,11 @@ function OrderConfirmationPage() {
 
         <div className="mt-6 flex flex-wrap gap-3">
           <Link to="/orders" className="btn-primary">View all orders</Link>
+          {String(order.orderStatus || "").toLowerCase() === "delivered" ? (
+            <Link to={`/review?orderId=${encodeURIComponent(order._id)}`} className="btn-secondary">
+              Review Products
+            </Link>
+          ) : null}
           {order.trackingNumber ? (
             <>
               <button type="button" onClick={handleCopyTracking} className="btn-secondary">Copy Tracking Number</button>

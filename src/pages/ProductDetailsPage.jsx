@@ -1,8 +1,10 @@
-import { Heart, Minus, Plus, ShieldCheck, ShoppingBag, Star, Truck } from "lucide-react";
+import { Heart, Minus, Plus, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DOMPurify from "dompurify";
+import StarRating from "../components/common/StarRating";
+import StarRatingDisplay from "../components/common/StarRatingDisplay";
 import ProductGrid from "../components/products/ProductGrid";
 import { useStore } from "../context/StoreContext";
 import { useAuth } from "../context/AuthContext";
@@ -379,10 +381,13 @@ function ProductDetailsPage() {
             {product.category}
           </p>
           <h1 className="mt-2 font-display text-4xl font-bold">{product.name}</h1>
-          <div className="mt-3 flex items-center gap-2 text-amber-500">
-            <Star size={16} fill="currentColor" />
-            <span className="font-semibold text-ink">{ratingSummary}</span>
-            <span className="text-sm text-muted">({localReviews.length || 0} reviews)</span>
+          <div className="mt-3">
+            <StarRatingDisplay
+              rating={ratingSummary}
+              reviewCount={localReviews.length || 0}
+              showValue
+              size={16}
+            />
           </div>
 
           <div className="mt-4 flex items-center gap-3">
@@ -585,7 +590,13 @@ function ProductDetailsPage() {
                       </div>
                       <p className="text-xs text-muted">{entry.createdAt ? new Date(entry.createdAt).toLocaleDateString() : ""}</p>
                     </div>
-                    <p className="mt-1 text-amber-600">{"★".repeat(Math.max(1, Math.min(5, Math.round(Number(entry.rating || 0)))))} <span className="text-xs text-muted">({Number(entry.rating || 0).toFixed(1)})</span></p>
+                    <div className="mt-1">
+                      <StarRating
+                        value={Number(entry.rating || 0)}
+                        readOnly
+                        size={16}
+                      />
+                    </div>
                     <p className="mt-2">{entry.comment}</p>
                   </article>
                 ))}

@@ -386,6 +386,7 @@ function AccountPage() {
         <AccountSidebar
           activeTab={activeTab}
           onTabChange={updateTab}
+          onNavigate={(path) => navigate(path)}
           user={user}
           onLogout={performLogout}
         />

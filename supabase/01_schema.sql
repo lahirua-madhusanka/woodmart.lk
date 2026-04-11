@@ -305,8 +305,7 @@ create table if not exists public.product_reviews (
   rating numeric(2,1) not null check (rating >= 1 and rating <= 5),
   comment text not null,
   created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (product_id, user_id)
+  updated_at timestamptz not null default now()
 );
 
 alter table public.product_reviews add column if not exists order_id uuid;
@@ -327,6 +326,9 @@ end $$;
 
 create index if not exists idx_product_reviews_product on public.product_reviews(product_id);
 create index if not exists idx_product_reviews_order on public.product_reviews(order_id);
+create unique index if not exists idx_product_reviews_user_product_order_unique
+  on public.product_reviews(user_id, product_id, order_id)
+  where order_id is not null;
 
 drop trigger if exists trg_product_reviews_updated_at on public.product_reviews;
 create trigger trg_product_reviews_updated_at

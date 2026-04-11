@@ -1,13 +1,14 @@
 const navItems = [
   { key: "dashboard", label: "Dashboard" },
   { key: "orders", label: "My Orders" },
+  { key: "my-reviews", label: "My Reviews", href: "/account/reviews" },
   { key: "addresses", label: "My Addresses" },
   { key: "settings", label: "Account Settings" },
   { key: "wishlist", label: "Wishlist" },
   { key: "cart", label: "Cart" },
 ];
 
-function AccountSidebar({ activeTab, onTabChange, user, onLogout }) {
+function AccountSidebar({ activeTab, onTabChange, onNavigate, user, onLogout }) {
   return (
     <div className="space-y-4">
       <div className="rounded-lg bg-slate-50 p-3">
@@ -21,7 +22,13 @@ function AccountSidebar({ activeTab, onTabChange, user, onLogout }) {
           <button
             key={item.key}
             type="button"
-            onClick={() => onTabChange(item.key)}
+            onClick={() => {
+              if (item.href) {
+                onNavigate?.(item.href);
+                return;
+              }
+              onTabChange(item.key);
+            }}
             className={`w-full rounded-lg px-3 py-2 text-left text-sm font-semibold transition ${
               activeTab === item.key
                 ? "bg-brand text-white"
