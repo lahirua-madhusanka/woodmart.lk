@@ -62,11 +62,15 @@ function CheckoutInner({ stripeEnabled }) {
   const [couponCodeInput, setCouponCodeInput] = useState("");
   const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [appliedCoupon, setAppliedCoupon] = useState(null);
-  const [couponDiscountAmount, setCouponDiscountAmount] = useState(0);
+  const couponDiscountAmount = Number(appliedCoupon?.discountAmount || 0);
+
+  const subtotalAmount = Number(cartSubtotal || 0);
+  const shippingAmount = Number(cartShippingTotal || 0);
+  const totalBeforeCoupon = subtotalAmount + shippingAmount;
 
   const total = useMemo(
-    () => Math.max(0, Number(cartSubtotal || 0) + Number(cartShippingTotal || 0) - Number(couponDiscountAmount || 0)),
-    [cartShippingTotal, cartSubtotal, couponDiscountAmount]
+    () => Math.max(0, totalBeforeCoupon - Math.max(0, Math.min(couponDiscountAmount, totalBeforeCoupon))),
+    [couponDiscountAmount, totalBeforeCoupon]
   );
 
   const handleApplyCoupon = async () => {
@@ -80,14 +84,21 @@ function CheckoutInner({ stripeEnabled }) {
     try {
       const response = await applyCouponApi(code);
       const coupon = response?.coupon || null;
-      const discountAmount = Number(coupon?.discountAmount || 0);
-      setAppliedCoupon(coupon);
-      setCouponDiscountAmount(discountAmount);
-      setCouponCodeInput(coupon?.code || code.toUpperCase());
+      const summaryDiscount = Number(response?.summary?.totalBeforeDiscount || 0) - Number(response?.summary?.totalAfterDiscount || 0);
+      const discountAmount = Number(coupon?.discountAmount ?? response?.discountAmount ?? summaryDiscount ?? 0);
+
+      if (!coupon || discountAmount <= 0) {
+        throw new Error("Coupon did not return a valid discount amount");
+      }
+
+      setAppliedCoupon({
+        ...coupon,
+        discountAmount,
+      });
+      setCouponCodeInput(coupon.code || code.toUpperCase());
       toast.success(response?.message || "Coupon applied successfully");
     } catch (error) {
       setAppliedCoupon(null);
-      setCouponDiscountAmount(0);
       toast.error(getApiErrorMessage(error));
     } finally {
       setApplyingCoupon(false);
@@ -96,7 +107,6 @@ function CheckoutInner({ stripeEnabled }) {
 
   const removeCoupon = () => {
     setAppliedCoupon(null);
-    setCouponDiscountAmount(0);
     setCouponCodeInput("");
   };
 
@@ -332,6 +342,12 @@ function CheckoutInner({ stripeEnabled }) {
         paymentStatus,
         paymentIntentId,
         couponCode: appliedCoupon?.code || null,
+        checkoutSummary: {
+          subtotalAmount,
+          shippingAmount,
+          couponDiscountAmount,
+          totalAmount: total,
+        },
       });
 
       toast.success("Order placed successfully");
@@ -556,11 +572,11 @@ function CheckoutInner({ stripeEnabled }) {
           </div>
 
           <div className="mt-4 space-y-2 border-t border-slate-200 pt-4 text-sm">
-            <div className="flex justify-between"><span className="text-muted">Subtotal</span><span>{formatMoney(cartSubtotal)}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Shipping</span><span>{formatMoney(Number(cartShippingTotal || 0))}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Subtotal</span><span>{formatMoney(subtotalAmount)}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Shipping</span><span>{formatMoney(shippingAmount)}</span></div>
             <div className="flex justify-between"><span className="text-muted">Product Discount</span><span>- {formatMoney(Number(cartDiscountTotal || 0))}</span></div>
-            <div className="flex justify-between"><span className="text-muted">Coupon Discount</span><span>- {formatMoney(Number(couponDiscountAmount || 0))}</span></div>
-            <div className="flex justify-between text-base font-semibold"><span>Total</span><span className="text-brand-dark">{formatMoney(total)}</span></div>
+            <div className="flex justify-between"><span className="text-muted">Coupon Discount</span><span>- {formatMoney(couponDiscountAmount)}</span></div>
+            <div className="flex justify-between text-base font-semibold"><span>Final Total</span><span className="text-brand-dark">{formatMoney(total)}</span></div>
           </div>
 
           <button

@@ -351,6 +351,9 @@ export const applyCouponForCheckout = asyncHandler(async (req, res) => {
 
   return res.json({
     message: "Coupon applied successfully",
+    couponCode: result.code,
+    discountAmount: Number(result.discountAmount || 0),
+    totalAfterDiscount: Number(totalAfterDiscount.toFixed(2)),
     coupon: {
       id: result.coupon.id,
       code: result.code,

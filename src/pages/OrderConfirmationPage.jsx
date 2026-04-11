@@ -7,6 +7,16 @@ import { getApiErrorMessage } from "../services/apiClient";
 import { getOrderByIdApi } from "../services/orderService";
 
 const COURIER_TRACKING_URL = "https://www.prontolanka.lk/";
+const ORDER_ITEM_PLACEHOLDER =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80"><rect width="80" height="80" fill="#f1f5f9"/><rect x="16" y="18" width="48" height="34" rx="4" fill="#cbd5e1"/><circle cx="30" cy="30" r="5" fill="#94a3b8"/><path d="M20 48l10-10 9 9 7-7 14 14H20z" fill="#e2e8f0"/><rect x="20" y="57" width="40" height="6" rx="3" fill="#cbd5e1"/></svg>'
+  );
+
+const resolveItemImage = (item) => {
+  const imageValue = String(item?.image || "").trim();
+  return imageValue || ORDER_ITEM_PLACEHOLDER;
+};
 
 function OrderConfirmationPage() {
   const { id } = useParams();
@@ -119,15 +129,28 @@ function OrderConfirmationPage() {
           </div>
         </div>
 
-        <div className="mt-6 space-y-2 rounded-xl border border-slate-200 p-4">
+        <div className="mt-6 space-y-3 rounded-xl border border-slate-200 p-4">
           {order.items.map((item) => (
-            <div key={item.productId} className="flex justify-between text-sm">
-              <span>
-                {item.name} x {item.quantity}
-                <br />
-                <span className="text-xs text-muted">Item: {formatMoney(Number(item.price || 0))} | Shipping: {formatMoney(Number(item.shippingPrice || 0))} | Discount: {formatMoney(Number(item.discountAmount || 0))}</span>
+            <div key={item.productId} className="flex items-start justify-between gap-3 border-b border-slate-100 pb-3 last:border-none last:pb-0">
+              <div className="flex min-w-0 items-start gap-3">
+                <img
+                  src={resolveItemImage(item)}
+                  alt={item.name || "Ordered product"}
+                  className="h-14 w-14 shrink-0 rounded-lg border border-slate-200 object-cover"
+                  onError={(event) => {
+                    event.currentTarget.src = ORDER_ITEM_PLACEHOLDER;
+                  }}
+                />
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-ink">{item.name}</p>
+                  <p className="text-xs text-muted">Qty: {Number(item.quantity || 0)}</p>
+                  <p className="text-xs text-muted">Price: {formatMoney(Number(item.price || 0))}</p>
+                  <p className="text-xs text-muted">Subtotal: {formatMoney(Number(item.lineSubtotal || Number(item.quantity || 0) * Number(item.price || 0)))}</p>
+                </div>
+              </div>
+              <span className="shrink-0 text-sm font-semibold text-ink">
+                {formatMoney(Number(item.lineTotal || Number(item.quantity || 0) * Number(item.price || 0)))}
               </span>
-              <span>{formatMoney(Number(item.lineTotal || (item.quantity * item.price)))}</span>
             </div>
           ))}
         </div>
