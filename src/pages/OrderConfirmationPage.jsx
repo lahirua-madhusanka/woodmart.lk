@@ -15,12 +15,35 @@ function OrderConfirmationPage() {
   const [loading, setLoading] = useState(true);
 
   const handleCopyTracking = async () => {
-    if (!order?.trackingNumber) return;
+    const trackingValue = String(order?.trackingNumber || "").trim();
+    if (!trackingValue) return;
+
     try {
-      await navigator.clipboard.writeText(order.trackingNumber);
+      await navigator.clipboard.writeText(trackingValue);
       toast.success("Tracking number copied");
-    } catch (error) {
-      toast.error("Unable to copy tracking number");
+      return;
+    } catch {
+      // Fall through to legacy clipboard fallback.
+    }
+
+    try {
+      const helper = document.createElement("textarea");
+      helper.value = trackingValue;
+      helper.setAttribute("readonly", "");
+      helper.style.position = "fixed";
+      helper.style.left = "-9999px";
+      document.body.appendChild(helper);
+      helper.select();
+      const copied = document.execCommand("copy");
+      document.body.removeChild(helper);
+
+      if (copied) {
+        toast.success("Tracking number copied");
+      } else {
+        toast.info("Copy not supported in this browser. Please copy manually.");
+      }
+    } catch {
+      toast.info("Copy not supported in this browser. Please copy manually.");
     }
   };
 
@@ -113,13 +136,13 @@ function OrderConfirmationPage() {
           <Link to="/orders" className="btn-primary">View all orders</Link>
           {order.trackingNumber ? (
             <>
-              <button type="button" onClick={handleCopyTracking} className="btn-secondary">Copy tracking</button>
+              <button type="button" onClick={handleCopyTracking} className="btn-secondary">Copy Tracking Number</button>
               <button
                 type="button"
                 onClick={() => window.open(COURIER_TRACKING_URL, "_blank", "noopener,noreferrer")}
                 className="btn-secondary"
               >
-                Track order
+                Track Order
               </button>
             </>
           ) : null}

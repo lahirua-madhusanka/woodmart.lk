@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import supabase from "../config/supabase.js";
 import { addOrderStatusHistory, autoDeliverIfDue, buildOrderLifecycleTimestamps } from "../services/orderWorkflow.js";
+import { sendOrderShippedEmail } from "../services/orderShippedEmailService.js";
 import { mapOrder, mapProduct, mapUser } from "../utils/dbMappers.js";
 
 const STOREFRONT_ASSETS_BUCKET =
@@ -671,6 +672,10 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
     throw new Error("Order not found");
   }
 
+  const isShippedTransition =
+    String(orderStatus || "").toLowerCase() === "shipped" &&
+    String(existing.order_status || "").toLowerCase() !== "shipped";
+
   const { error: updateError } = await supabase
     .from("orders")
     .update(payload)
@@ -701,7 +706,67 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
     throw new Error(loadError?.message || "Failed to load order");
   }
 
-  res.json(mapOrder(updatedOrder, { includeUser: true }));
+  const mappedOrder = mapOrder(updatedOrder, { includeUser: true });
+  res.json(mappedOrder);
+
+  if (!isShippedTransition) {
+    return;
+  }
+
+  const trackingForEmail = String(mappedOrder.trackingNumber || "").trim();
+
+  // eslint-disable-next-line no-console
+  console.log(
+    "[ORDER_STATUS]",
+    JSON.stringify({
+      event: "changed_to_shipped",
+      orderId: mappedOrder._id,
+      changedBy: req.user?.id || req.user?._id || null,
+      hasTracking: Boolean(trackingForEmail),
+      courierName: mappedOrder.courierName || null,
+      timestamp: new Date().toISOString(),
+    })
+  );
+
+  if (!trackingForEmail) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[ORDER_SHIPPED_EMAIL]",
+      JSON.stringify({
+        event: "send_skipped_missing_tracking",
+        orderId: mappedOrder._id,
+        changedBy: req.user?.id || req.user?._id || null,
+        timestamp: new Date().toISOString(),
+      })
+    );
+    return;
+  }
+
+  setImmediate(() => {
+    sendOrderShippedEmail({
+      ...mappedOrder,
+      customerEmail: mappedOrder?.userId?.email || "",
+      customerName:
+        mappedOrder?.shippingAddress?.fullName ||
+        mappedOrder?.userId?.name ||
+        "Customer",
+    }).catch((error) => {
+      // eslint-disable-next-line no-console
+      console.error(
+        "[ORDER_SHIPPED_EMAIL]",
+        JSON.stringify({
+          event: "send_failed",
+          orderId: mappedOrder._id,
+          changedBy: req.user?.id || req.user?._id || null,
+          message: error?.message || "Unknown error",
+          statusCode: error?.statusCode || null,
+          providerStatus: error?.providerStatus || null,
+          providerPayload: error?.providerPayload || null,
+          timestamp: new Date().toISOString(),
+        })
+      );
+    });
+  });
 });
 
 export const getAllUsersAdmin = asyncHandler(async (req, res) => {
