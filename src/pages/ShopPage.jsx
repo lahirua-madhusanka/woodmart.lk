@@ -1,9 +1,11 @@
 import { Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import ProductGrid from "../components/products/ProductGrid";
+import ProductCard from "../components/products/ProductCard";
 import { useStore } from "../context/StoreContext";
 import { getProductsApi } from "../services/productService";
+
+const TOP_SECTION_PRODUCT_COUNT = 4;
 
 function ShopPage() {
   const { products } = useStore();
@@ -108,6 +110,8 @@ function ShopPage() {
   }, [catalog, category, maxPrice, minRating, search, sortBy]);
 
   const visibleProducts = filtered.slice(0, visibleCount);
+  const topSectionProducts = visibleProducts.slice(0, TOP_SECTION_PRODUCT_COUNT);
+  const remainingProducts = visibleProducts.slice(TOP_SECTION_PRODUCT_COUNT);
 
   const onCategoryChange = (nextCategory) => {
     setCategory(nextCategory);
@@ -224,20 +228,34 @@ function ShopPage() {
               No products found.
             </div>
           ) : (
-            <ProductGrid products={visibleProducts} />
-          )}
-
-          {visibleCount < filtered.length && (
-            <div className="mt-8 text-center">
-              <button
-                onClick={() => setVisibleCount((count) => count + 6)}
-                className="btn-secondary"
-              >
-                Load More
-              </button>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+              {topSectionProducts.map((product) => (
+                <ProductCard key={product._id || product.id} product={product} />
+              ))}
             </div>
           )}
         </div>
+
+        {!loadingCatalog && filtered.length > 0 && remainingProducts.length > 0 ? (
+          <div className="lg:col-span-2">
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
+              {remainingProducts.map((product) => (
+                <ProductCard key={product._id || product.id} product={product} />
+              ))}
+            </div>
+          </div>
+        ) : null}
+
+        {visibleCount < filtered.length && (
+          <div className="mt-2 text-center lg:col-span-2">
+            <button
+              onClick={() => setVisibleCount((count) => count + 6)}
+              className="btn-secondary"
+            >
+              Load More
+            </button>
+          </div>
+        )}
       </div>
     </section>
   );
