@@ -15,6 +15,15 @@ alter table public.product_reviews drop constraint if exists product_reviews_pro
 
 drop index if exists idx_product_reviews_product_user_unique;
 
+-- Cleanup duplicates so unique index creation does not fail on existing datasets.
+delete from public.product_reviews pr
+using public.product_reviews dup
+where pr.id > dup.id
+  and pr.user_id = dup.user_id
+  and pr.product_id = dup.product_id
+  and pr.order_id = dup.order_id
+  and pr.order_id is not null;
+
 create unique index if not exists idx_product_reviews_user_product_order_unique
   on public.product_reviews(user_id, product_id, order_id)
   where order_id is not null;

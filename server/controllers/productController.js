@@ -94,23 +94,29 @@ export const getReviewEligibility = asyncHandler(async (req, res) => {
     throw new Error("Product not found");
   }
 
-  const [deliveredOrder, existingReview] = await Promise.all([
-    getEligibleDeliveredOrder({ userId: req.user._id, productId: req.params.id }),
-    supabase
+  const deliveredOrder = await getEligibleDeliveredOrder({ userId: req.user._id, productId: req.params.id });
+
+  let existingReview = null;
+  if (deliveredOrder?.id) {
+    const { data: existingRows, error: existingError } = await supabase
       .from("product_reviews")
       .select("id, user_id, name, title, rating, comment, order_id, created_at, updated_at")
       .eq("product_id", req.params.id)
       .eq("user_id", req.user._id)
-      .maybeSingle(),
-  ]);
+      .eq("order_id", deliveredOrder.id)
+      .order("created_at", { ascending: false })
+      .limit(1);
 
-  if (existingReview.error) {
-    res.status(500);
-    throw new Error(existingReview.error.message);
+    if (existingError) {
+      res.status(500);
+      throw new Error(existingError.message);
+    }
+
+    existingReview = Array.isArray(existingRows) ? existingRows[0] || null : null;
   }
 
   const hasDeliveredPurchase = Boolean(deliveredOrder);
-  const hasExistingReview = Boolean(existingReview.data);
+  const hasExistingReview = Boolean(existingReview);
 
   let message = "Only verified buyers can review this product";
   if (!hasDeliveredPurchase) {
@@ -124,7 +130,7 @@ export const getReviewEligibility = asyncHandler(async (req, res) => {
     canReview: hasDeliveredPurchase && !hasExistingReview,
     canEdit: hasDeliveredPurchase && hasExistingReview,
     message,
-    existingReview: existingReview.data ? normalizeReview(existingReview.data) : null,
+    existingReview: existingReview ? normalizeReview(existingReview) : null,
   });
 });
 
@@ -445,21 +451,22 @@ export const addReview = asyncHandler(async (req, res) => {
     throw new Error("You can only review products you have purchased and received.");
   }
 
-  const { data: existingReview, error: existingError } = await supabase
+  const { data: existingReviews, error: existingError } = await supabase
     .from("product_reviews")
     .select("id")
     .eq("product_id", req.params.id)
     .eq("user_id", req.user._id)
-    .maybeSingle();
+    .eq("order_id", deliveredOrder.id)
+    .limit(1);
 
   if (existingError) {
     res.status(500);
     throw new Error(existingError.message);
   }
 
-  if (existingReview) {
+  if (Array.isArray(existingReviews) && existingReviews.length > 0) {
     res.status(409);
-    throw new Error("You already reviewed this product. Please edit your existing review.");
+    throw new Error("You already reviewed this product for this order. Please edit your existing review.");
   }
 
   const { data: insertedReview, error: insertError } = await supabase
@@ -508,21 +515,25 @@ export const updateOwnReview = asyncHandler(async (req, res) => {
     throw new Error("You can only review products you have purchased and received.");
   }
 
-  const { data: existingReview, error: existingError } = await supabase
+  const { data: existingReviews, error: existingError } = await supabase
     .from("product_reviews")
     .select("id")
     .eq("product_id", req.params.id)
     .eq("user_id", req.user._id)
-    .maybeSingle();
+    .eq("order_id", deliveredOrder.id)
+    .order("created_at", { ascending: false })
+    .limit(1);
 
   if (existingError) {
     res.status(500);
     throw new Error(existingError.message);
   }
 
-  if (!existingReview) {
+  const targetReview = Array.isArray(existingReviews) ? existingReviews[0] || null : null;
+
+  if (!targetReview) {
     res.status(404);
-    throw new Error("Review not found for this product");
+    throw new Error("Review not found for this product and order");
   }
 
   const { data: updatedReview, error: updateError } = await supabase
@@ -534,7 +545,7 @@ export const updateOwnReview = asyncHandler(async (req, res) => {
       order_id: deliveredOrder.id,
       name: req.user.name,
     })
-    .eq("id", existingReview.id)
+    .eq("id", targetReview.id)
     .select("id, user_id, name, title, rating, comment, order_id, created_at, updated_at")
     .single();
 

@@ -292,7 +292,7 @@ function AccountPage() {
           onClick={() => navigate("/orders")}
           className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-semibold text-ink hover:border-brand hover:text-brand"
         >
-          Go to Orders Page
+          View All Orders
         </button>
       </div>
       <OrdersTable orders={orders} loading={loadingOrders} onViewDetails={viewOrderDetails} />
