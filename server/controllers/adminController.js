@@ -676,6 +676,16 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
     String(orderStatus || "").toLowerCase() === "shipped" &&
     String(existing.order_status || "").toLowerCase() !== "shipped";
 
+  const effectiveTrackingNumber =
+    trackingNumber !== undefined
+      ? String(trackingNumber || "").trim()
+      : String(existing.tracking_number || "").trim();
+
+  if (isShippedTransition && !effectiveTrackingNumber) {
+    res.status(400);
+    throw new Error("Tracking number is required before marking an order as shipped.");
+  }
+
   const { error: updateError } = await supabase
     .from("orders")
     .update(payload)

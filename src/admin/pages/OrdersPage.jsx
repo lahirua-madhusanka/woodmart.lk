@@ -79,6 +79,14 @@ function OrdersPage() {
   }, [orders, query]);
 
   const handleStatusChange = async (id, value) => {
+    const targetOrder = orders.find((item) => item._id === id);
+    const trackingNumber = String(targetOrder?.trackingNumber || "").trim();
+
+    if (value === "shipped" && !trackingNumber) {
+      toast.error("Tracking number is required before marking an order as shipped.");
+      return;
+    }
+
     try {
       const updated = await updateOrderDetails(id, { orderStatus: value, statusNote: `Status changed to ${value}` });
       setOrders((prev) => prev.map((order) => (order._id === id ? updated : order)));
@@ -208,7 +216,9 @@ function OrdersPage() {
                   <option value="confirmed">Confirmed</option>
                   <option value="processing">Processing</option>
                   <option value="packed">Packed</option>
-                  <option value="shipped">Shipped</option>
+                  <option value="shipped" disabled={!String(row.trackingNumber || "").trim()}>
+                    Shipped{!String(row.trackingNumber || "").trim() ? " (requires tracking)" : ""}
+                  </option>
                   <option value="out_for_delivery">Out for delivery</option>
                   <option value="delivered">Delivered</option>
                   <option value="cancelled">Cancelled</option>

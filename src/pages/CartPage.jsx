@@ -88,22 +88,8 @@ function CartPage() {
               </div>
             </div>
 
-            <p className="mt-3 text-xs text-muted">
-              Free shipping above {formatMoney(freeShippingThreshold)}
-            </p>
-
-            <div className="mt-5">
-              <label className="mb-2 block text-sm font-semibold">Coupon Code</label>
-              <div className="flex gap-2">
-                <input
-                  placeholder="Enter code"
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none"
-                />
-                <button className="rounded-lg border border-brand px-3 py-2 text-sm font-semibold text-brand">
-                  Apply
-                </button>
-              </div>
-            </div>
+          
+            
 
             <Link to="/checkout" className="btn-primary mt-5 w-full">
               Proceed to Checkout

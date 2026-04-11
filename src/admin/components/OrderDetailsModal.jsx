@@ -71,6 +71,11 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
   });
 
   const items = useMemo(() => order?.items || [], [order]);
+  const isShippedSelected = form.orderStatus === "shipped";
+  const trackingRequiredError =
+    isShippedSelected && !String(form.trackingNumber || "").trim()
+      ? "Tracking number is required before marking an order as shipped."
+      : "";
 
   if (!open) return null;
 
@@ -87,6 +92,11 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
 
   const handleSave = async () => {
     if (!order?._id) return;
+
+    if (trackingRequiredError) {
+      toast.error(trackingRequiredError);
+      return;
+    }
 
     if (form.trackingNumber && form.trackingNumber.length > 120) {
       toast.error("Tracking number is too long");
@@ -290,7 +300,10 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
 
                   <label className="text-sm">
                     <span className="mb-1 block font-semibold">Tracking Number</span>
-                    <input value={form.trackingNumber} onChange={(event) => setForm((prev) => ({ ...prev, trackingNumber: event.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Enter tracking number" />
+                    <input value={form.trackingNumber} onChange={(event) => setForm((prev) => ({ ...prev, trackingNumber: event.target.value }))} className={`w-full rounded-lg border px-3 py-2 ${trackingRequiredError ? "border-red-400 bg-red-50" : "border-slate-300"}`} placeholder="Enter tracking number" />
+                    {trackingRequiredError ? (
+                      <p className="mt-1 text-xs font-medium text-red-600">{trackingRequiredError}</p>
+                    ) : null}
                   </label>
 
                   <label className="text-sm">
@@ -308,7 +321,7 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
                     <textarea rows={3} value={form.adminNote} onChange={(event) => setForm((prev) => ({ ...prev, adminNote: event.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Internal notes for team" />
                   </label>
 
-                  <button type="button" onClick={handleSave} disabled={saving} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                  <button type="button" onClick={handleSave} disabled={saving || Boolean(trackingRequiredError)} className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60">
                     {saving ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
