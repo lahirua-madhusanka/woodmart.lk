@@ -99,10 +99,15 @@ export const autoDeliverIfDue = async (rows = []) => {
       continue;
     }
 
+    const currentPaymentStatus = String(row.payment_status || "").toLowerCase();
+    const shouldMarkPaid = currentPaymentStatus !== "paid";
+
     const { data: updated, error } = await supabase
       .from("orders")
       .update({
         order_status: "delivered",
+        payment_status: "paid",
+        paid_amount: Number(row.total_amount || 0),
         delivered_at: row.delivered_at || nowIso,
         updated_at: nowIso,
       })
@@ -128,9 +133,26 @@ export const autoDeliverIfDue = async (rows = []) => {
     nextRows[index] = {
       ...row,
       order_status: "delivered",
+      payment_status: "paid",
+      paid_amount: Number(row.total_amount || 0),
       delivered_at: updated.delivered_at,
       updated_at: updated.updated_at,
     };
+
+    // eslint-disable-next-line no-console
+    console.log(
+      "[ORDER_AUTO_DELIVER]",
+      JSON.stringify({
+        event: "auto_delivered",
+        orderId: row.id,
+        fromOrderStatus: row.order_status,
+        toOrderStatus: "delivered",
+        fromPaymentStatus: row.payment_status,
+        toPaymentStatus: "paid",
+        autoMarkedAsPaid: shouldMarkPaid,
+        timestamp: nowIso,
+      })
+    );
   }
 
   return nextRows;

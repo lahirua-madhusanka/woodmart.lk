@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { getApiErrorMessage } from "../../services/apiClient";
 import { updateOrderDetails } from "../services/ordersService";
@@ -515,18 +515,23 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
       ? "Tracking number is required before marking an order as shipped."
       : "";
 
-  if (!open) return null;
-
-  const syncFromOrder = () => {
+  const syncFromOrder = (source = order) => {
     setForm({
-      orderStatus: order?.orderStatus || "pending",
-      paymentStatus: order?.paymentStatus || "pending",
-      trackingNumber: order?.trackingNumber || "",
-      courierName: order?.courierName || "",
-      adminNote: order?.adminNote || "",
+      orderStatus: source?.orderStatus || "pending",
+      paymentStatus: source?.paymentStatus || "pending",
+      trackingNumber: source?.trackingNumber || "",
+      courierName: source?.courierName || "",
+      adminNote: source?.adminNote || "",
       statusNote: "",
     });
   };
+
+  useEffect(() => {
+    if (!open) return;
+    syncFromOrder(order);
+  }, [order, open]);
+
+  if (!open) return null;
 
   const handleSave = async () => {
     if (!order?._id) return;
@@ -553,7 +558,7 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
       });
       onOrderUpdated?.(updated);
       toast.success("Order updated successfully");
-      syncFromOrder();
+      syncFromOrder(updated);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
     } finally {

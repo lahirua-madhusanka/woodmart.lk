@@ -643,22 +643,15 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
     payload.tracking_added_at = nowIso;
   }
 
+  const normalizedNextOrderStatus = String(orderStatus || "").trim().toLowerCase();
+
   if (orderStatus) {
     Object.assign(payload, buildOrderLifecycleTimestamps(orderStatus, nowIso));
   }
 
-  if (paymentStatus === "paid") {
-    const { data: totalRow } = await supabase
-      .from("orders")
-      .select("total_amount")
-      .eq("id", req.params.id)
-      .maybeSingle();
-    payload.paid_amount = Number(totalRow?.total_amount || 0);
-  }
-
   const { data: existing, error: existingError } = await supabase
     .from("orders")
-    .select("id, order_status")
+    .select("id, order_status, payment_status, total_amount, tracking_number")
     .eq("id", req.params.id)
     .maybeSingle();
 
@@ -672,8 +665,27 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
     throw new Error("Order not found");
   }
 
+  // Backend enforcement: delivered orders must always be paid.
+  const autoMarkedAsPaid =
+    normalizedNextOrderStatus === "delivered" &&
+    String(existing.payment_status || "").toLowerCase() !== "paid";
+
+  if (normalizedNextOrderStatus === "delivered") {
+    payload.payment_status = "paid";
+    if (String(existing.payment_status || "").toLowerCase() !== "paid") {
+      payload.paid_amount = Number(existing.total_amount || 0);
+    }
+  }
+
+  if (
+    String(payload.payment_status || paymentStatus || "").toLowerCase() === "paid" &&
+    payload.paid_amount === undefined
+  ) {
+    payload.paid_amount = Number(existing.total_amount || 0);
+  }
+
   const isShippedTransition =
-    String(orderStatus || "").toLowerCase() === "shipped" &&
+    normalizedNextOrderStatus === "shipped" &&
     String(existing.order_status || "").toLowerCase() !== "shipped";
 
   const effectiveTrackingNumber =
@@ -703,6 +715,40 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
       note: String(statusNote || "").trim() || `Status updated to ${orderStatus}`,
       changedBy: req.user?.id || req.user?._id || null,
     });
+  }
+
+  if (normalizedNextOrderStatus === "delivered") {
+    // eslint-disable-next-line no-console
+    console.log(
+      "[ORDER_PAYMENT_AUTO_UPDATE]",
+      JSON.stringify({
+        event: "delivered_forces_paid",
+        orderId: req.params.id,
+        fromPaymentStatus: existing.payment_status,
+        toPaymentStatus: "paid",
+        autoMarkedAsPaid,
+        changedBy: req.user?.id || req.user?._id || null,
+        timestamp: nowIso,
+      })
+    );
+  }
+
+  if (orderStatus && existing.order_status !== orderStatus) {
+    // eslint-disable-next-line no-console
+    console.log(
+      "[ORDER_STATUS_UPDATE]",
+      JSON.stringify({
+        event: "admin_status_changed",
+        orderId: req.params.id,
+        fromOrderStatus: existing.order_status,
+        toOrderStatus: orderStatus,
+        fromPaymentStatus: existing.payment_status,
+        toPaymentStatus: payload.payment_status || existing.payment_status,
+        autoMarkedAsPaid,
+        changedBy: req.user?.id || req.user?._id || null,
+        timestamp: nowIso,
+      })
+    );
   }
 
   const { data: updatedOrder, error: loadError } = await supabase
