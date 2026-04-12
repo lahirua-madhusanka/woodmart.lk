@@ -18,6 +18,7 @@ const NewsletterSection = lazy(() => import("../components/home/NewsletterSectio
 
 function HomePage() {
   const { loadingProducts, products } = useStore();
+  const hasProducts = products.length > 0;
 
   const featuredCategories = useMemo(() => {
     const categoryMap = new Map();
@@ -97,7 +98,15 @@ function HomePage() {
         fallback={<SectionSkeleton minHeight={420} title="Preparing categories..." />}
       >
         <Suspense fallback={<SectionSkeleton minHeight={420} title="Preparing categories..." />}>
-          <CategorySection categories={featuredCategories} />
+          {hasProducts && featuredCategories.length ? (
+            <CategorySection categories={featuredCategories} />
+          ) : (
+            <section className="container-pad py-10">
+              <div className="rounded-xl border border-dashed border-slate-300 bg-white p-8 text-sm text-muted">
+                No products available yet.
+              </div>
+            </section>
+          )}
         </Suspense>
       </LazySection>
 
@@ -125,7 +134,7 @@ function HomePage() {
             {loadingProducts ? (
               <div className="rounded-xl bg-white p-10 text-center text-muted">Loading products...</div>
             ) : (
-              <ProductGrid products={bestSelling} />
+              <ProductGrid products={bestSelling} emptyMessage="No products available yet." />
             )}
           </section>
         </Suspense>
@@ -173,7 +182,7 @@ function HomePage() {
             {loadingProducts ? (
               <div className="rounded-xl bg-white p-10 text-center text-muted">Loading products...</div>
             ) : (
-              <ProductGrid products={newArrivals} />
+              <ProductGrid products={newArrivals} emptyMessage="No products available yet." />
             )}
           </section>
         </Suspense>

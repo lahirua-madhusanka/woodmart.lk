@@ -1,10 +1,10 @@
 import ProductCard from "./ProductCard";
 
-function ProductGrid({ products }) {
+function ProductGrid({ products, emptyMessage = "No products found with the current filters." }) {
   if (!products.length) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-muted">
-        No products found with the current filters.
+        {emptyMessage}
       </div>
     );
   }

@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { useAuth } from "./AuthContext";
-import { products as fallbackProducts } from "../data/products";
 import { getProductPricing } from "../utils/pricing";
 import {
   addToCartApi,
@@ -21,7 +20,7 @@ const StoreContext = createContext(null);
 
 export function StoreProvider({ children }) {
   const { isAuthenticated } = useAuth();
-  const [products, setProducts] = useState(fallbackProducts);
+  const [products, setProducts] = useState([]);
   const [cartItems, setCartItems] = useState({});
   const [wishlist, setWishlist] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -48,11 +47,9 @@ export function StoreProvider({ children }) {
       setLoadingProducts(true);
       try {
         const data = await getProductsApi();
-        if (Array.isArray(data) && data.length) {
-          setProducts(data);
-        }
+        setProducts(Array.isArray(data) ? data : []);
       } catch {
-        // Keep local fallback data when API is unavailable.
+        setProducts([]);
       } finally {
         setLoadingProducts(false);
       }
