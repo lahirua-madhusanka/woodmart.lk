@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { toast } from "react-toastify";
 import { useAuth } from "./AuthContext";
 import { products as fallbackProducts } from "../data/products";
+import { getProductPricing } from "../utils/pricing";
 import {
   addToCartApi,
   getCartApi,
@@ -160,8 +161,9 @@ export function StoreProvider({ children }) {
         .map(([id, quantity]) => {
           const product = products.find((item) => getProductId(item) === String(id));
           if (!product) return null;
-          const listPrice = Number(product.price || 0);
-          const unitPrice = Number(product.discountPrice ?? product.price ?? 0);
+          const pricing = getProductPricing(product);
+          const listPrice = Number(pricing.originalPrice || 0);
+          const unitPrice = Number(pricing.finalPrice || listPrice || 0);
           const unitDiscountAmount = Math.max(0, listPrice - unitPrice);
           const unitShippingPrice = Number(product.shippingPrice || 0);
           const quantityValue = Number(quantity || 0);
@@ -173,6 +175,9 @@ export function StoreProvider({ children }) {
             unitPrice,
             unitDiscountAmount,
             unitShippingPrice,
+            discountPercentage: Number(pricing.discountPercentage || 0),
+            promotionActive: Boolean(pricing.promotionActive),
+            promotion: pricing.promotion || null,
             subtotal: quantityValue * unitPrice,
             shippingSubtotal: quantityValue * unitShippingPrice,
             discountSubtotal: quantityValue * unitDiscountAmount,

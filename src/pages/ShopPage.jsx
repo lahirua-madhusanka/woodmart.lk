@@ -6,6 +6,8 @@ import { useStore } from "../context/StoreContext";
 import { getProductsApi } from "../services/productService";
 
 const TOP_SECTION_PRODUCT_COUNT = 4;
+const INITIAL_VISIBLE_PRODUCTS = 24;
+const LOAD_MORE_STEP = 12;
 
 function ShopPage() {
   const { products } = useStore();
@@ -18,14 +20,14 @@ function ShopPage() {
   const [minRating, setMinRating] = useState(0);
   const [maxPrice, setMaxPrice] = useState(200000);
   const [sortBy, setSortBy] = useState("featured");
-  const [visibleCount, setVisibleCount] = useState(6);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_PRODUCTS);
   const [catalog, setCatalog] = useState([]);
   const [loadingCatalog, setLoadingCatalog] = useState(true);
 
   useEffect(() => {
     setSearch(urlQuery);
     setCategory(urlCategory || "All");
-    setVisibleCount(6);
+    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
   }, [urlCategory, urlQuery]);
 
   useEffect(() => {
@@ -115,13 +117,13 @@ function ShopPage() {
 
   const onCategoryChange = (nextCategory) => {
     setCategory(nextCategory);
-    setVisibleCount(6);
+    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
     updateQueryParam("category", nextCategory);
   };
 
   const onSearchChange = (value) => {
     setSearch(value);
-    setVisibleCount(6);
+    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
   };
 
   return (
@@ -249,7 +251,7 @@ function ShopPage() {
         {visibleCount < filtered.length && (
           <div className="mt-2 text-center lg:col-span-2">
             <button
-              onClick={() => setVisibleCount((count) => count + 6)}
+              onClick={() => setVisibleCount((count) => count + LOAD_MORE_STEP)}
               className="btn-secondary"
             >
               Load More

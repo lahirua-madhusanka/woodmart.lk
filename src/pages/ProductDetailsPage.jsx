@@ -10,6 +10,7 @@ import { useStore } from "../context/StoreContext";
 import { useAuth } from "../context/AuthContext";
 import { useStorefrontSettings } from "../context/StorefrontSettingsContext";
 import { getApiErrorMessage } from "../services/apiClient";
+import { getProductPricing } from "../utils/pricing";
 import {
   addProductReviewApi,
   getProductByIdApi,
@@ -247,11 +248,10 @@ function ProductDetailsPage() {
   }
 
   const inWishlist = wishlist.includes(productId);
-  const unitPrice = Number(product.discountPrice || product.price || 0);
-  const regularPrice = Number(product.price || unitPrice);
-  const hasDiscount =
-    Number(product.discountPrice || 0) > 0 &&
-    Number(product.discountPrice) < Number(product.price || 0);
+  const pricing = getProductPricing(product || {});
+  const unitPrice = Number(pricing.finalPrice || 0);
+  const regularPrice = Number(pricing.originalPrice || unitPrice);
+  const hasDiscount = Boolean(pricing.hasDiscount);
   const tags = Array.isArray(product.tags) ? product.tags : [];
 
   const onDecreaseQuantity = () => {
@@ -395,10 +395,21 @@ function ProductDetailsPage() {
             {hasDiscount && (
               <span className="text-lg text-muted line-through">{formatMoney(regularPrice)}</span>
             )}
+            {hasDiscount ? (
+              <span className="rounded-full bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white">
+                {Number(pricing.discountPercentage || 0)}% OFF
+              </span>
+            ) : null}
             {!hasDiscount && product.oldPrice && (
               <span className="text-lg text-muted line-through">{formatMoney(Number(product.oldPrice))}</span>
             )}
           </div>
+
+          {pricing.promotionActive && pricing.promotion?.title ? (
+            <p className="mt-2 text-sm font-medium text-emerald-700">
+              Promotion applied: {pricing.promotion.title}
+            </p>
+          ) : null}
 
           <div className="mt-5 flex flex-wrap items-center gap-2 text-xs">
             <span className={`rounded-full px-2 py-1 font-semibold ${inStock ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"}`}>

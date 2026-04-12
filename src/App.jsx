@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
 import PrivateRoute from "./components/auth/PrivateRoute";
 import PageFallbackLoader from "./components/common/PageFallbackLoader";
 import MainLayout from "./components/layout/MainLayout";
@@ -8,6 +8,8 @@ import AdminProtectedRoute from "./admin/routes/AdminProtectedRoute";
 // Route-level splitting keeps the initial storefront payload small.
 const HomePage = lazy(() => import("./pages/HomePage"));
 const ShopPage = lazy(() => import("./pages/ShopPage"));
+const PromotionsPage = lazy(() => import("./pages/PromotionsPage"));
+const PromotionDetailsPage = lazy(() => import("./pages/PromotionDetailsPage"));
 const SearchResultsPage = lazy(() => import("./pages/SearchResultsPage"));
 const ProductDetailsPage = lazy(() => import("./pages/ProductDetailsPage"));
 const CartPage = lazy(() => import("./pages/CartPage"));
@@ -48,12 +50,18 @@ const AdminMessagesPage = lazy(() => import("./admin/pages/MessagesPage"));
 const AdminContactInboxPage = lazy(() => import("./admin/pages/ContactInboxPage"));
 const AdminBannersPage = lazy(() => import("./admin/pages/BannersPage"));
 const AdminCouponsPage = lazy(() => import("./admin/pages/CouponsPage"));
+const AdminPromotionsPage = lazy(() => import("./admin/pages/PromotionsPage"));
 const AdminCustomRequestsPage = lazy(() => import("./admin/pages/CustomRequestsPage"));
 const AdminSettingsPage = lazy(() => import("./admin/pages/SettingsPage"));
 
 const withSuspense = (node, label) => (
   <Suspense fallback={<PageFallbackLoader label={label} />}>{node}</Suspense>
 );
+
+function LegacyPromotionSlugRedirect() {
+  const { slug } = useParams();
+  return <Navigate to={`/promotion/${encodeURIComponent(slug || "")}`} replace />;
+}
 
 function App() {
   const location = useLocation();
@@ -104,6 +112,7 @@ function App() {
         <Route path="custom-requests" element={withSuspense(<AdminCustomRequestsPage />, "Loading custom requests...")} />
         <Route path="banners" element={withSuspense(<AdminBannersPage />, "Loading banners...")} />
         <Route path="coupons" element={withSuspense(<AdminCouponsPage />, "Loading coupons...")} />
+        <Route path="promotions" element={withSuspense(<AdminPromotionsPage />, "Loading promotions...")} />
         <Route path="settings" element={withSuspense(<AdminSettingsPage />, "Loading settings...")} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
@@ -111,6 +120,9 @@ function App() {
       <Route path="/" element={<MainLayout />}>
         <Route index element={withSuspense(<HomePage />, "Loading home...")} />
         <Route path="shop" element={withSuspense(<ShopPage />, "Loading shop...")} />
+        <Route path="promotions" element={withSuspense(<PromotionsPage />, "Loading promotions...")} />
+        <Route path="promotions/:slug" element={<LegacyPromotionSlugRedirect />} />
+        <Route path="promotion/:slug" element={withSuspense(<PromotionDetailsPage />, "Loading promotion...")} />
         <Route path="search" element={withSuspense(<SearchResultsPage />, "Searching products...")} />
         <Route path="product/:id" element={withSuspense(<ProductDetailsPage />, "Loading product...")} />
         <Route

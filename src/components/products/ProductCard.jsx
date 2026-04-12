@@ -6,6 +6,7 @@ import RoutePrefetchLink from "../common/RoutePrefetchLink";
 import { usePrefetchOnHover, usePrefetchTrigger } from "../../hooks/usePrefetchOnHover";
 import { useStorefrontSettings } from "../../context/StorefrontSettingsContext";
 import { useStore } from "../../context/StoreContext";
+import { getProductPricing } from "../../utils/pricing";
 
 function ProductCard({ product }) {
   const { addToCart, getProductId, toggleWishlist, wishlist } = useStore();
@@ -14,10 +15,8 @@ function ProductCard({ product }) {
   const productId = getProductId(product);
   const inWishlist = wishlist.includes(productId);
 
-  const price = useMemo(
-    () => Number(product.discountPrice || product.price || 0),
-    [product.discountPrice, product.price]
-  );
+  const pricing = useMemo(() => getProductPricing(product), [product]);
+  const price = pricing.finalPrice;
   const reviewCount = useMemo(() => {
     if (Array.isArray(product.reviews)) {
       return product.reviews.length;
@@ -49,7 +48,12 @@ function ProductCard({ product }) {
             className="h-64 w-full object-cover transition duration-500 group-hover:scale-105"
           />
         </RoutePrefetchLink>
-        {product.badge && (
+        {pricing.hasDiscount ? (
+          <span className="absolute left-3 top-3 rounded-full bg-rose-600 px-3 py-1 text-xs font-semibold text-white">
+            {Number(pricing.discountPercentage || 0)}% OFF
+          </span>
+        ) : null}
+        {product.badge && !pricing.hasDiscount && (
           <span className="absolute left-3 top-3 rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">
             {product.badge}
           </span>
@@ -87,10 +91,10 @@ function ProductCard({ product }) {
 
         <div className="flex items-center gap-2">
           <span className="text-lg font-bold text-brand-dark">{formatMoney(price)}</span>
-          {product.discountPrice && (
-            <span className="text-sm text-muted line-through">{formatMoney(product.price)}</span>
+          {pricing.hasDiscount && (
+            <span className="text-sm text-muted line-through">{formatMoney(pricing.originalPrice)}</span>
           )}
-          {!product.discountPrice && product.oldPrice && (
+          {!pricing.hasDiscount && product.oldPrice && (
             <span className="text-sm text-muted line-through">{formatMoney(product.oldPrice)}</span>
           )}
         </div>

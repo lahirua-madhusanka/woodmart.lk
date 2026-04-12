@@ -552,13 +552,22 @@ function CheckoutInner({ stripeEnabled }) {
               const listPrice = Number(item.listPrice ?? item.price ?? unitPrice);
               const unitDiscount = Number(item.unitDiscountAmount || 0);
               const unitShipping = Number(item.unitShippingPrice || 0);
+              const discountPercentage = Number(item.discountPercentage || 0);
               return (
                 <article key={item.productId} className="flex gap-3 border-b border-slate-100 pb-3">
                   <img src={item.images?.[0] || item.image} alt={item.name} className="h-14 w-14 rounded-lg object-cover" />
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-sm font-semibold text-ink">{item.name}</p>
                     <p className="text-xs text-muted">Qty: {item.quantity}</p>
-                    <p className="text-xs text-muted">Item price: {formatMoney(unitPrice)} {unitDiscount > 0 ? `(discounted from ${formatMoney(listPrice)})` : ""}</p>
+                    <p className="text-xs text-muted">
+                      Item price: {formatMoney(unitPrice)} {unitDiscount > 0 ? `(discounted from ${formatMoney(listPrice)})` : ""}
+                    </p>
+                    {unitDiscount > 0 ? (
+                      <p className="text-xs font-semibold text-rose-600">{discountPercentage}% OFF</p>
+                    ) : null}
+                    {item.promotionActive && item.promotion?.title ? (
+                      <p className="text-xs font-medium text-emerald-700">Promotion: {item.promotion.title}</p>
+                    ) : null}
                     <p className="text-xs text-muted">Shipping: {formatMoney(unitShipping)} each</p>
                     {unitDiscount > 0 ? <p className="text-xs text-emerald-700">Discount: {formatMoney(unitDiscount * Number(item.quantity || 0))}</p> : null}
                   </div>

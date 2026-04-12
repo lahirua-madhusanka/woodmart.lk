@@ -1,5 +1,6 @@
 import asyncHandler from "express-async-handler";
 import supabase from "../config/supabase.js";
+import { attachPromotionPricingToProductRows } from "../services/promotionPricingService.js";
 import { mapCart } from "../utils/dbMappers.js";
 
 const productSelect =
@@ -58,7 +59,7 @@ const loadCart = async (userId) => {
       throw new Error(productsError.message);
     }
 
-    products = productRows || [];
+    products = await attachPromotionPricingToProductRows(productRows || []);
   }
 
   return mapCart(cart, items || [], products);

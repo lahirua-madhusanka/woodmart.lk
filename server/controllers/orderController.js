@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import env from "../config/env.js";
 import supabase from "../config/supabase.js";
 import { recordCouponUsageForOrder, validateCouponForCart } from "../services/couponEngine.js";
+import { attachPromotionPricingToProductRows } from "../services/promotionPricingService.js";
 import { addOrderStatusHistory, autoDeliverIfDue } from "../services/orderWorkflow.js";
 import { sendOrderConfirmationEmail } from "../services/orderConfirmationEmailService.js";
 import { mapOrder } from "../utils/dbMappers.js";
@@ -10,6 +11,9 @@ import { mapOrder } from "../utils/dbMappers.js";
 const stripe = env.stripeSecretKey ? new Stripe(env.stripeSecretKey) : null;
 
 const orderSelect =
+  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total, promotion_id, promotion_title, promotion_slug, promotion_discount_percentage, promotion_original_price, promotion_discounted_price, promotion_active), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
+
+const orderSelectLegacy =
   "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
 
 const mapAddressRow = (row) => ({
@@ -48,9 +52,35 @@ const isMissingColumnError = (error, columnName) => {
   ) || details.includes(`column ${column} does not exist`) || message.includes(`column ${column} does not exist`);
 };
 
+const isMissingPromotionSnapshotColumnError = (error) => {
+  const columns = [
+    "promotion_id",
+    "promotion_title",
+    "promotion_slug",
+    "promotion_discount_percentage",
+    "promotion_original_price",
+    "promotion_discounted_price",
+    "promotion_active",
+  ];
+
+  return columns.some((column) => isMissingColumnError(error, column));
+};
+
 const loadOrderById = async (id, includeUser = true) => {
-  let query = supabase.from("orders").select(orderSelect).eq("id", id).maybeSingle();
-  let { data, error } = await query;
+  let { data, error } = await supabase
+    .from("orders")
+    .select(orderSelect)
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error && isMissingPromotionSnapshotColumnError(error)) {
+    ({ data, error } = await supabase
+      .from("orders")
+      .select(orderSelectLegacy)
+      .eq("id", id)
+      .maybeSingle());
+  }
+
   if (error) throw new Error(error.message);
   if (!data) return null;
   [data] = await autoDeliverIfDue([data]);
@@ -100,7 +130,16 @@ const loadCartWithProducts = async (userId) => {
     throw new Error(itemsError.message);
   }
 
-  return { cart, items: items || [] };
+  const productRows = (items || []).map((entry) => entry.products).filter(Boolean);
+  const pricedRows = await attachPromotionPricingToProductRows(productRows);
+  const pricedMap = new Map(pricedRows.map((row) => [row.id, row]));
+
+  const pricedItems = (items || []).map((entry) => ({
+    ...entry,
+    products: entry.products ? pricedMap.get(entry.products.id) || entry.products : null,
+  }));
+
+  return { cart, items: pricedItems };
 };
 
 export const createPaymentIntent = asyncHandler(async (req, res) => {
@@ -148,8 +187,14 @@ export const createOrder = asyncHandler(async (req, res) => {
   }
 
   const orderItems = items.map((item) => {
-    const listPrice = Number(item.products.price ?? 0);
-    const unitSellingPrice = Number(item.products.discount_price ?? item.products.price ?? 0);
+    const resolvedOriginalPrice = Number(item.products?.pricing?.originalPrice ?? item.products?.price ?? 0);
+    const resolvedUnitPrice = Number(item.products?.pricing?.priceToPay ?? item.products?.discount_price ?? item.products?.price ?? 0);
+    const promotion = item.products?.pricing?.promotion || null;
+    const promotionActive = Boolean(item.products?.pricing?.promotionActive);
+    const promotionDiscountPercentage = Number(item.products?.pricing?.discountPercentage || 0);
+
+    const listPrice = resolvedOriginalPrice;
+    const unitSellingPrice = resolvedUnitPrice;
     const unitDiscountAmount = Math.max(0, listPrice - unitSellingPrice);
     const unitProductCost = Number(item.products.product_cost ?? 0);
     const unitShippingPrice = Number(item.products.shipping_price ?? 0);
@@ -181,6 +226,13 @@ export const createOrder = asyncHandler(async (req, res) => {
       line_product_cost_total: lineProductCostTotal,
       line_total: lineTotal,
       line_profit_total: lineProfitTotal,
+      promotion_id: promotion?.id || null,
+      promotion_title: promotion?.title || null,
+      promotion_slug: promotion?.slug || null,
+      promotion_discount_percentage: promotionActive ? promotionDiscountPercentage : 0,
+      promotion_original_price: promotionActive ? listPrice : null,
+      promotion_discounted_price: promotionActive ? unitSellingPrice : null,
+      promotion_active: promotionActive,
     };
   });
 
@@ -262,9 +314,27 @@ export const createOrder = asyncHandler(async (req, res) => {
     })
   );
 
-  const { error: orderItemsError } = await supabase
+  let { error: orderItemsError } = await supabase
     .from("order_items")
     .insert(orderItems.map((item) => ({ ...item, order_id: createdOrder.id })));
+
+  if (orderItemsError && isMissingPromotionSnapshotColumnError(orderItemsError)) {
+    const legacyItems = orderItems.map((item) => {
+      const nextItem = { ...item };
+      delete nextItem.promotion_id;
+      delete nextItem.promotion_title;
+      delete nextItem.promotion_slug;
+      delete nextItem.promotion_discount_percentage;
+      delete nextItem.promotion_original_price;
+      delete nextItem.promotion_discounted_price;
+      delete nextItem.promotion_active;
+      return nextItem;
+    });
+
+    ({ error: orderItemsError } = await supabase
+      .from("order_items")
+      .insert(legacyItems.map((item) => ({ ...item, order_id: createdOrder.id }))));
+  }
 
   if (orderItemsError) {
     res.status(500);
@@ -364,11 +434,19 @@ export const createOrder = asyncHandler(async (req, res) => {
 });
 
 export const getUserOrders = asyncHandler(async (req, res) => {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from("orders")
     .select(orderSelect)
     .eq("user_id", req.user._id)
     .order("created_at", { ascending: false });
+
+  if (error && isMissingPromotionSnapshotColumnError(error)) {
+    ({ data, error } = await supabase
+      .from("orders")
+      .select(orderSelectLegacy)
+      .eq("user_id", req.user._id)
+      .order("created_at", { ascending: false }));
+  }
 
   if (error) {
     res.status(500);

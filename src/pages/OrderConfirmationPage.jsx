@@ -145,6 +145,17 @@ function OrderConfirmationPage() {
                   <p className="text-sm font-semibold text-ink">{item.name}</p>
                   <p className="text-xs text-muted">Qty: {Number(item.quantity || 0)}</p>
                   <p className="text-xs text-muted">Price: {formatMoney(Number(item.price || 0))}</p>
+                  {Number(item.promotionDiscountPercentage || 0) > 0 ? (
+                    <p className="text-xs text-muted">
+                      Original: {formatMoney(Number(item.promotionOriginalPrice || item.listPrice || item.price || 0))}
+                    </p>
+                  ) : null}
+                  {Number(item.promotionDiscountPercentage || 0) > 0 ? (
+                    <p className="text-xs font-semibold text-rose-600">{Number(item.promotionDiscountPercentage || 0)}% OFF</p>
+                  ) : null}
+                  {item.promotionActive && item.promotionTitle ? (
+                    <p className="text-xs font-medium text-emerald-700">Promotion: {item.promotionTitle}</p>
+                  ) : null}
                   <p className="text-xs text-muted">Subtotal: {formatMoney(Number(item.lineSubtotal || Number(item.quantity || 0) * Number(item.price || 0)))}</p>
                 </div>
               </div>

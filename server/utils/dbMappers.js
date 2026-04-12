@@ -29,13 +29,31 @@ export const mapProduct = (row) => {
     updatedAt: review.updated_at,
   }));
 
+  const pricing = row.pricing || {};
+  const originalPrice = Number(pricing.originalPrice ?? row.price ?? 0);
+  const discountedPrice = Number(pricing.discountedPrice ?? row.discount_price ?? row.price ?? 0);
+  const priceToPay = Number(pricing.priceToPay ?? discountedPrice ?? originalPrice);
+  const promotionActive = Boolean(pricing.promotionActive);
+  const discountPercentage = Number(pricing.discountPercentage || 0);
+  const promotion = pricing.promotion || null;
+  const effectiveDiscountPrice =
+    Number.isFinite(discountedPrice) && discountedPrice > 0 && discountedPrice < originalPrice
+      ? discountedPrice
+      : null;
+
   return {
     _id: row.id,
     id: row.id,
     name: row.name,
     description: row.description,
     price: Number(row.price || 0),
-    discountPrice: row.discount_price == null ? null : Number(row.discount_price),
+    discountPrice: effectiveDiscountPrice,
+    originalPrice,
+    discountedPrice: priceToPay,
+    discountPercentage,
+    promotionActive,
+    promotion,
+    pricingSource: pricing.pricingSource || "regular",
     productCost: Number(row.product_cost || 0),
     shippingPrice: Number(row.shipping_price || 0),
     category: row.category,
@@ -86,6 +104,13 @@ export const mapOrder = (row, options = {}) => {
           Number(item.line_shipping_total || Number(item.shipping_price || 0) * Number(item.quantity || 0)) +
           Number(item.line_discount_total || Number(item.discount_amount || 0) * Number(item.quantity || 0)))
       ).toFixed(2)),
+    promotionId: item.promotion_id || null,
+    promotionTitle: item.promotion_title || "",
+    promotionSlug: item.promotion_slug || "",
+    promotionDiscountPercentage: Number(item.promotion_discount_percentage || 0),
+    promotionOriginalPrice: item.promotion_original_price == null ? null : Number(item.promotion_original_price),
+    promotionDiscountedPrice: item.promotion_discounted_price == null ? null : Number(item.promotion_discounted_price),
+    promotionActive: Boolean(item.promotion_active),
   }));
 
   const mapped = {

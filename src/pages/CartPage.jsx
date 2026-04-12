@@ -39,7 +39,20 @@ function CartPage() {
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-wide text-brand">{item.category}</p>
                   <h2 className="font-semibold">{item.name}</h2>
-                  <p className="mt-1 text-sm text-muted">{formatMoney(Number(item.discountPrice || item.price))} each</p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-semibold text-ink">{formatMoney(Number(item.unitPrice || item.price || 0))} each</span>
+                    {Number(item.unitDiscountAmount || 0) > 0 ? (
+                      <span className="text-muted line-through">{formatMoney(Number(item.listPrice || item.price || 0))}</span>
+                    ) : null}
+                    {Number(item.unitDiscountAmount || 0) > 0 ? (
+                      <span className="rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                        {Number(item.discountPercentage || 0)}% OFF
+                      </span>
+                    ) : null}
+                  </div>
+                  {item.promotionActive && item.promotion?.title ? (
+                    <p className="mt-1 text-xs font-medium text-emerald-700">{item.promotion.title}</p>
+                  ) : null}
                   <div className="mt-3 inline-flex items-center rounded-lg border border-slate-300">
                     <button
                       onClick={() => updateCartItem(item.productId, item.quantity - 1)}

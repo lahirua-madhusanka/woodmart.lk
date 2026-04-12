@@ -1,6 +1,7 @@
 import asyncHandler from "express-async-handler";
 import crypto from "node:crypto";
 import supabase from "../config/supabase.js";
+import { attachPromotionPricingToProductRows } from "../services/promotionPricingService.js";
 import { mapProduct } from "../utils/dbMappers.js";
 
 const MAX_PRODUCT_IMAGES = 6;
@@ -162,7 +163,8 @@ export const getProducts = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 
-  res.json((data || []).map(mapProduct));
+  const pricedRows = await attachPromotionPricingToProductRows(data || []);
+  res.json(pricedRows.map(mapProduct));
 });
 
 export const getProductById = asyncHandler(async (req, res) => {
@@ -182,7 +184,8 @@ export const getProductById = asyncHandler(async (req, res) => {
     throw new Error("Product not found");
   }
 
-  res.json(mapProduct(data));
+  const [pricedRow] = await attachPromotionPricingToProductRows([data]);
+  res.json(mapProduct(pricedRow || data));
 });
 
 export const createProduct = asyncHandler(async (req, res) => {
@@ -288,7 +291,8 @@ export const createProduct = asyncHandler(async (req, res) => {
     throw new Error(loadError?.message || "Failed to load created product");
   }
 
-  res.status(201).json(mapProduct(fullProduct));
+  const [pricedRow] = await attachPromotionPricingToProductRows([fullProduct]);
+  res.status(201).json(mapProduct(pricedRow || fullProduct));
 });
 
 export const updateProduct = asyncHandler(async (req, res) => {
@@ -404,7 +408,8 @@ export const updateProduct = asyncHandler(async (req, res) => {
     throw new Error(loadError?.message || "Failed to load updated product");
   }
 
-  res.json(mapProduct(updated));
+  const [pricedRow] = await attachPromotionPricingToProductRows([updated]);
+  res.json(mapProduct(pricedRow || updated));
 });
 
 export const deleteProduct = asyncHandler(async (req, res) => {
