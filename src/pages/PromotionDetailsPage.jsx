@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { ShoppingCart } from "lucide-react";
+import StarRatingDisplay from "../components/common/StarRatingDisplay";
 import { useStorefrontSettings } from "../context/StorefrontSettingsContext";
 import { useStore } from "../context/StoreContext";
 import { getApiErrorMessage } from "../services/apiClient";
@@ -97,6 +98,13 @@ function PromotionDetailsPage() {
                   <Link to={`/product/${product._id || product.id}`} className="line-clamp-2 text-lg font-semibold text-ink">
                     {product.name}
                   </Link>
+
+                  <StarRatingDisplay
+                    rating={Number(product.rating || 0)}
+                    reviewCount={Array.isArray(product.reviews) ? product.reviews.length : Number(product.reviewCount || 0)}
+                    showValue
+                    size={14}
+                  />
 
                   <div className="flex items-center gap-2">
                     <span className="text-lg font-bold text-brand-dark">{formatMoney(item.discountedPrice)}</span>
