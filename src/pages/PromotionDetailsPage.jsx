@@ -86,7 +86,7 @@ function PromotionDetailsPage() {
               <article key={`${item.id}-${item.productId}`} className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm transition hover:shadow-premium">
                 <div className="relative overflow-hidden">
                   <Link to={`/product/${product._id || product.id}`}>
-                    <img src={product.images?.[0] || product.image} alt={product.name} className="h-64 w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
+                    <img src={product.images?.[0] || product.image} alt={product.name} className="h-full w-full object-cover transition duration-500 group-hover:scale-105" loading="lazy" />
                   </Link>
                   <span className="absolute left-3 top-3 rounded-full bg-rose-600 px-3 py-1 text-xs font-bold text-white">
                     {Number(item.discountPercentage || 0)}% OFF

@@ -164,7 +164,7 @@ function HeroSection() {
               {activeSlide.title}
             </h1>
 
-            <p className="max-w-2xl rounded-xl border border-[#eddcc6]/70 bg-[#fff8ef]/66 px-4 py-3 text-[0.92rem] font-normal leading-relaxed text-[#5f4b3a] sm:px-5 sm:py-3.5 md:text-[0.97rem]">
+            <p className="max-w-2xl rounded-xl border border-[#eddcc6]/70 bg-[#fff8ef]/66 px-4 py-3 text-[0.92rem] font-normal leading-relaxed text-[#2f2318] sm:px-5 sm:py-3.5 md:text-[0.97rem]">
               {activeSlide.subtitle}
             </p>
 

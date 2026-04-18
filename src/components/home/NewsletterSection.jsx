@@ -74,13 +74,13 @@ function NewsletterSection() {
         <div className="grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
           <div>
             <p className="text-xs font-semibold uppercase tracking-widest text-brand-light">
-              Join Our Newsletter
+              BECOME A MEMBER
             </p>
             <h3 className="mt-2 font-display text-3xl font-semibold">
-              Get style drops, private offers, and design tips.
+              Exclusive Access Starts Here
             </h3>
             <p className="mt-2 text-sm text-brand-light">
-              Be first to access curated product launches and exclusive seasonal edits.
+              Enjoy private offers, early product launches, and member-only perks.
             </p>
           </div>
 
