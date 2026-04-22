@@ -32,13 +32,13 @@ function CategorySection({ categories }) {
               transition={{ delay: index * 0.06 }}
               className="group overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
             >
-             <div className="overflow-hidden"> 
+             <div className="overflow-hidden w-full h-44"> 
               {category.image ? ( 
                 <img src={category.image} alt={category.name} 
                 loading="lazy" 
                 decoding="async" 
                 className="w-full h-full object-cover transition duration-500 group-hover:scale-105" /> )
-                : ( <div className="h-44 w-full bg-slate-100" /> )} 
+                : ( <div className="h-full w-full bg-slate-100" /> )} 
                 </div>
               <div className="p-4">
                 <h3 className="text-lg font-semibold">{category.name}</h3>
