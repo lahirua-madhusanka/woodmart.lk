@@ -3,10 +3,10 @@ import RoutePrefetchLink from "../common/RoutePrefetchLink";
 import { getStorefrontBannersBySectionApi } from "../../services/storefrontBannersService";
 
 const sectionLabelMap = {
-  promo_strip: "Promo Strip",
-  category_promo: "Category Promo",
-  featured_section: "Featured",
-  secondary_banner: "More Offers",
+  promo_strip: "",
+  category_promo: "",
+  featured_section: "",
+  secondary_banner: "",
 };
 
 function BannerAction({ banner }) {
@@ -106,7 +106,7 @@ function StorefrontBannerSection({ section, columns = 2, containerClassName = ""
             <div className="absolute inset-0 bg-gradient-to-r from-black/65 to-transparent" />
             <div className="relative z-10 max-w-md space-y-3">
               <p className="text-xs font-semibold uppercase tracking-wider text-brand-light">
-                {sectionLabelMap[banner.section] || sectionLabelMap[section] || "Banner"}
+                {sectionLabelMap[banner.section] || sectionLabelMap[section]}
               </p>
               <h3 className="font-display text-3xl font-semibold leading-tight">{banner.title}</h3>
               {banner.subtitle ? <p className="text-sm text-white/90">{banner.subtitle}</p> : null}

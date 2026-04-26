@@ -5,6 +5,7 @@ import ProductCard from "../components/products/ProductCard";
 import { useStore } from "../context/StoreContext";
 import { getProductsApi } from "../services/productService";
 
+
 const TOP_SECTION_PRODUCT_COUNT = 4;
 const INITIAL_VISIBLE_PRODUCTS = 24;
 const LOAD_MORE_STEP = 12;

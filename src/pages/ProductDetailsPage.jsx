@@ -123,6 +123,7 @@ function ProductDetailsPage() {
     setLocalReviews(Array.isArray(product?.reviews) ? product.reviews : []);
   }, [product]);
 
+
   useEffect(() => {
     let ignore = false;
 
