@@ -19,11 +19,13 @@ import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
 import { getApiErrorMessage } from "../services/apiClient";
 import {
+  cancelOrderApi,
   deleteCheckoutAddressApi,
   getCheckoutProfileApi,
   getUserOrdersApi,
   saveCheckoutAddressApi,
 } from "../services/orderService";
+import CancelOrderModal from "../components/orders/CancelOrderModal";
 
 const tabKeys = ["dashboard", "orders", "addresses", "settings", "wishlist", "cart"];
 
@@ -66,6 +68,8 @@ function AccountPage() {
   const [savingAddress, setSavingAddress] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancellingOrder, setCancellingOrder] = useState(false);
 
   useEffect(() => {
     if (!user?._id) return;
@@ -119,6 +123,21 @@ function AccountPage() {
     const id = order?._id || order?.id;
     if (!id) return;
     navigate(`/order-confirmation/${id}`);
+  };
+
+  const handleConfirmCancelOrder = async (reason) => {
+    if (!cancelTarget?._id) return;
+    setCancellingOrder(true);
+    try {
+      const updated = await cancelOrderApi(cancelTarget._id, reason);
+      setOrders((prev) => prev.map((o) => (o._id === updated._id ? updated : o)));
+      toast.success("Order cancelled successfully");
+      setCancelTarget(null);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setCancellingOrder(false);
+    }
   };
 
   const startAddAddress = () => {
@@ -278,7 +297,7 @@ function AccountPage() {
             View All Orders
           </button>
         </div>
-        <OrdersTable orders={orders.slice(0, 5)} loading={loadingOrders} onViewDetails={viewOrderDetails} />
+        <OrdersTable orders={orders.slice(0, 5)} loading={loadingOrders} onViewDetails={viewOrderDetails} onCancelOrder={setCancelTarget} />
       </section>
     </div>
   );
@@ -295,7 +314,7 @@ function AccountPage() {
           View All Orders
         </button>
       </div>
-      <OrdersTable orders={orders} loading={loadingOrders} onViewDetails={viewOrderDetails} />
+      <OrdersTable orders={orders} loading={loadingOrders} onViewDetails={viewOrderDetails} onCancelOrder={setCancelTarget} />
     </div>
   );
 
@@ -411,6 +430,13 @@ function AccountPage() {
       }
     >
       {contentByTab[activeTab]}
+      <CancelOrderModal
+        open={Boolean(cancelTarget)}
+        orderId={cancelTarget?._id}
+        onClose={() => (cancellingOrder ? null : setCancelTarget(null))}
+        onConfirm={handleConfirmCancelOrder}
+        submitting={cancellingOrder}
+      />
     </UserAccountLayout>
   );
 }

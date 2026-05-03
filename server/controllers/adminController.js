@@ -4,13 +4,14 @@ import crypto from "node:crypto";
 import supabase from "../config/supabase.js";
 import { addOrderStatusHistory, autoDeliverIfDue, buildOrderLifecycleTimestamps } from "../services/orderWorkflow.js";
 import { sendOrderShippedEmail } from "../services/orderShippedEmailService.js";
+import { restoreVariationStockForOrder } from "./orderController.js";
 import { mapOrder, mapProduct, mapUser } from "../utils/dbMappers.js";
 
 const STOREFRONT_ASSETS_BUCKET =
   process.env.STOREFRONT_ASSETS_BUCKET || "storefront-assets";
 
 const orderSelect =
-  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, variation_id, variation_name, variation_sku, variation_image, variation_price, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total, promotion_id, promotion_title, promotion_slug, promotion_discount_percentage, promotion_original_price, promotion_discounted_price, promotion_active), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
+  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, cancellation_reason, cancelled_by, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, variation_id, variation_name, variation_sku, variation_image, variation_price, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total, promotion_id, promotion_title, promotion_slug, promotion_discount_percentage, promotion_original_price, promotion_discounted_price, promotion_active), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
 
 const productSelectV2 =
   "id, name, description, shipping_price, category, rating, brand, featured, status, created_at, updated_at, product_images(image_url, sort_order), product_variations(id, name, price, discounted_price, cost, stock, sku, image_url, sort_order), product_reviews(id, user_id, name, rating, comment, created_at, updated_at)";
@@ -737,7 +738,6 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
     .select("id, order_status, payment_status, total_amount, tracking_number")
     .eq("id", req.params.id)
     .maybeSingle();
-
   if (existingError) {
     res.status(500);
     throw new Error(existingError.message);
@@ -746,6 +746,51 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
   if (!existing) {
     res.status(404);
     throw new Error("Order not found");
+  }
+
+  const currentOrderStatus = String(existing.order_status || "").toLowerCase();
+
+  // Hard lock: cancelled orders are FINAL — no status, payment, tracking, or note edits.
+  if (currentOrderStatus === "cancelled") {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[ORDER_LOCKED]",
+      JSON.stringify({
+        event: "attempt_to_modify_cancelled_order",
+        orderId: req.params.id,
+        attemptedBy: req.user?.id || req.user?._id || null,
+        attemptedPayload: { orderStatus, paymentStatus, trackingNumber, courierName, adminNote, statusNote },
+        timestamp: new Date().toISOString(),
+      })
+    );
+    res.status(403);
+    throw new Error("Cancelled orders cannot be modified");
+  }
+
+  // Status transition rules (forward-only, except cancellation from pending/processing).
+  if (orderStatus && orderStatus !== existing.order_status) {
+    const STATUS_ORDER = ["pending", "confirmed", "processing", "packed", "shipped", "out_for_delivery", "delivered"];
+    const fromIdx = STATUS_ORDER.indexOf(currentOrderStatus);
+    const toIdx = STATUS_ORDER.indexOf(normalizedNextOrderStatus);
+
+    if (normalizedNextOrderStatus === "cancelled") {
+      // Allow cancellation only from pending/processing/confirmed/packed (pre-ship states)
+      const CANCELLABLE_FROM = new Set(["pending", "confirmed", "processing", "packed"]);
+      if (!CANCELLABLE_FROM.has(currentOrderStatus)) {
+        res.status(400);
+        throw new Error("Order cannot be cancelled at this stage");
+      }
+    } else if (normalizedNextOrderStatus === "returned") {
+      // Returns are only valid after delivery
+      if (currentOrderStatus !== "delivered") {
+        res.status(400);
+        throw new Error("Only delivered orders can be marked as returned");
+      }
+    } else if (fromIdx >= 0 && toIdx >= 0 && toIdx < fromIdx) {
+      // Disallow moving the lifecycle backwards
+      res.status(400);
+      throw new Error(`Cannot move order status from "${currentOrderStatus}" back to "${normalizedNextOrderStatus}"`);
+    }
   }
 
   // Backend enforcement: delivered orders must always be paid.
@@ -781,6 +826,20 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
     throw new Error("Tracking number is required before marking an order as shipped.");
   }
 
+  const isCancelTransition =
+    normalizedNextOrderStatus === "cancelled" &&
+    String(existing.order_status || "").toLowerCase() !== "cancelled";
+
+  if (isCancelTransition) {
+    const NON_CANCELLABLE = new Set(["shipped", "out_for_delivery", "delivered", "returned"]);
+    if (NON_CANCELLABLE.has(String(existing.order_status || "").toLowerCase())) {
+      res.status(400);
+      throw new Error("Order cannot be cancelled after shipping");
+    }
+    payload.cancellation_reason = String(statusNote || "").trim() || "Cancelled by admin";
+    payload.cancelled_by = "admin";
+  }
+
   const { error: updateError } = await supabase
     .from("orders")
     .update(payload)
@@ -798,6 +857,10 @@ export const updateOrderStatusAdmin = asyncHandler(async (req, res) => {
       note: String(statusNote || "").trim() || `Status updated to ${orderStatus}`,
       changedBy: req.user?.id || req.user?._id || null,
     });
+  }
+
+  if (isCancelTransition) {
+    await restoreVariationStockForOrder(req.params.id);
   }
 
   if (normalizedNextOrderStatus === "delivered") {

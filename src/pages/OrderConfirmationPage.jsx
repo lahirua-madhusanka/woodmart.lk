@@ -4,7 +4,10 @@ import { Link, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useStorefrontSettings } from "../context/StorefrontSettingsContext";
 import { getApiErrorMessage } from "../services/apiClient";
-import { getOrderByIdApi } from "../services/orderService";
+import { cancelOrderApi, getOrderByIdApi } from "../services/orderService";
+import CancelOrderModal from "../components/orders/CancelOrderModal";
+
+const CANCELLABLE_STATUSES = new Set(["pending", "processing"]);
 
 const COURIER_TRACKING_URL = "https://www.prontolanka.lk/";
 const ORDER_ITEM_PLACEHOLDER =
@@ -23,6 +26,23 @@ function OrderConfirmationPage() {
   const { formatMoney } = useStorefrontSettings();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showCancel, setShowCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  const handleConfirmCancel = async (reason) => {
+    if (!order?._id) return;
+    setCancelling(true);
+    try {
+      const updated = await cancelOrderApi(order._id, reason);
+      setOrder(updated);
+      toast.success("Order cancelled successfully");
+      setShowCancel(false);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   const handleCopyTracking = async () => {
     const trackingValue = String(order?.trackingNumber || "").trim();
@@ -191,9 +211,33 @@ function OrderConfirmationPage() {
               </button>
             </>
           ) : null}
+          {CANCELLABLE_STATUSES.has(String(order.orderStatus || "").toLowerCase()) ? (
+            <button
+              type="button"
+              onClick={() => setShowCancel(true)}
+              className="rounded-lg border border-red-500 px-4 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+            >
+              Cancel Order
+            </button>
+          ) : null}
           <Link to="/shop" className="btn-secondary">Continue shopping</Link>
         </div>
+
+        {String(order.orderStatus || "").toLowerCase() === "cancelled" && order.cancellationReason ? (
+          <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <p className="font-semibold">This order was cancelled.</p>
+            <p>Reason: {order.cancellationReason}</p>
+          </div>
+        ) : null}
       </div>
+
+      <CancelOrderModal
+        open={showCancel}
+        orderId={order?._id}
+        onClose={() => (cancelling ? null : setShowCancel(false))}
+        onConfirm={handleConfirmCancel}
+        submitting={cancelling}
+      />
     </section>
   );
 }

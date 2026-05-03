@@ -11,10 +11,10 @@ import { mapOrder } from "../utils/dbMappers.js";
 const stripe = env.stripeSecretKey ? new Stripe(env.stripeSecretKey) : null;
 
 const orderSelect =
-  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, variation_id, variation_name, variation_sku, variation_image, variation_price, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total, promotion_id, promotion_title, promotion_slug, promotion_discount_percentage, promotion_original_price, promotion_discounted_price, promotion_active), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
+  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, cancellation_reason, cancelled_by, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, variation_id, variation_name, variation_sku, variation_image, variation_price, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total, promotion_id, promotion_title, promotion_slug, promotion_discount_percentage, promotion_original_price, promotion_discounted_price, promotion_active), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
 
 const orderSelectLegacy =
-  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, variation_id, variation_name, variation_sku, variation_image, variation_price, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
+  "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, cancellation_reason, cancelled_by, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, variation_id, variation_name, variation_sku, variation_image, variation_price, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
 
 const mapAddressRow = (row) => ({
   id: row.id,
@@ -724,4 +724,140 @@ export const deleteCheckoutAddress = asyncHandler(async (req, res) => {
     savedAddresses: (addresses || []).map(mapAddressRow),
     addressBookReady: !listError,
   });
+});
+
+const USER_CANCELLABLE_STATUSES = new Set(["pending", "processing"]);
+const NON_CANCELLABLE_STATUSES = new Set(["shipped", "out_for_delivery", "delivered", "cancelled", "returned"]);
+
+export const restoreVariationStockForOrder = async (orderId) => {
+  const { data: items, error } = await supabase
+    .from("order_items")
+    .select("variation_id, quantity")
+    .eq("order_id", orderId);
+
+  if (error) {
+    // eslint-disable-next-line no-console
+    console.error("[cancelOrder] failed to load order_items for stock restore:", error.message);
+    return;
+  }
+
+  for (const item of items || []) {
+    const variationId = item?.variation_id;
+    const qty = Number(item?.quantity || 0);
+    if (!variationId || qty <= 0) continue;
+
+    const { data: variation, error: varError } = await supabase
+      .from("product_variations")
+      .select("stock")
+      .eq("id", variationId)
+      .maybeSingle();
+
+    if (varError || !variation) {
+      // eslint-disable-next-line no-console
+      console.error("[cancelOrder] could not read variation for restore:", varError?.message || "missing");
+      continue;
+    }
+
+    const nextStock = Number(variation.stock || 0) + qty;
+    const { error: updateError } = await supabase
+      .from("product_variations")
+      .update({ stock: nextStock })
+      .eq("id", variationId);
+
+    if (updateError) {
+      // eslint-disable-next-line no-console
+      console.error("[cancelOrder] failed to restore stock for variation", variationId, updateError.message);
+    }
+  }
+};
+
+export const cancelOrder = asyncHandler(async (req, res) => {
+  const orderId = String(req.params.id || "").trim();
+  const reasonRaw = String(req.body?.reason || "").trim();
+
+  if (!orderId) {
+    res.status(400);
+    throw new Error("Order id is required");
+  }
+
+  if (!reasonRaw) {
+    res.status(400);
+    throw new Error("Cancellation reason is required");
+  }
+
+  if (reasonRaw.length > 500) {
+    res.status(400);
+    throw new Error("Cancellation reason must be 500 characters or fewer");
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from("orders")
+    .select("id, user_id, order_status")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (existingError) {
+    res.status(500);
+    throw new Error(existingError.message);
+  }
+
+  if (!existing) {
+    res.status(404);
+    throw new Error("Order not found");
+  }
+
+  if (existing.user_id !== req.user._id && req.user.role !== "admin") {
+    res.status(403);
+    throw new Error("Not authorized to cancel this order");
+  }
+
+  const currentStatus = String(existing.order_status || "").toLowerCase();
+
+  if (NON_CANCELLABLE_STATUSES.has(currentStatus) && currentStatus !== "cancelled") {
+    res.status(400);
+    throw new Error("Order cannot be cancelled after shipping");
+  }
+
+  if (currentStatus === "cancelled") {
+    res.status(400);
+    throw new Error("Order is already cancelled");
+  }
+
+  if (!USER_CANCELLABLE_STATUSES.has(currentStatus)) {
+    res.status(400);
+    throw new Error(`Order in status \"${currentStatus}\" cannot be cancelled`);
+  }
+
+  const nowIso = new Date().toISOString();
+  const { error: updateError } = await supabase
+    .from("orders")
+    .update({
+      order_status: "cancelled",
+      cancelled_at: nowIso,
+      cancellation_reason: reasonRaw,
+      cancelled_by: "user",
+      updated_at: nowIso,
+    })
+    .eq("id", orderId);
+
+  if (updateError) {
+    res.status(500);
+    throw new Error(updateError.message);
+  }
+
+  try {
+    await addOrderStatusHistory({
+      orderId,
+      status: "cancelled",
+      note: `Cancelled by customer: ${reasonRaw}`,
+      changedBy: req.user._id,
+    });
+  } catch {
+    // Non-blocking
+  }
+
+  await restoreVariationStockForOrder(orderId);
+
+  const order = await loadOrderById(orderId, true);
+  res.json(order);
 });

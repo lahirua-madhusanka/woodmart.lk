@@ -767,6 +767,17 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
                 </div>
               </section>
 
+              {String(order.orderStatus || "").toLowerCase() === "cancelled" ? (
+                <section className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <h4 className="text-sm font-semibold uppercase tracking-wide text-red-700">Cancellation</h4>
+                  <div className="mt-3 space-y-1 text-sm text-red-700">
+                    <p><span className="font-semibold">Cancelled by:</span> {order.cancelledBy || "—"}</p>
+                    <p><span className="font-semibold">Cancelled at:</span> {formatDateTime(order.cancelledAt)}</p>
+                    <p><span className="font-semibold">Reason:</span> {order.cancellationReason || "—"}</p>
+                  </div>
+                </section>
+              ) : null}
+
               <section className="rounded-lg border border-slate-200 p-4">
                 <h4 className="text-sm font-semibold uppercase tracking-wide text-muted">Customer & Shipping</h4>
                 <div className="mt-3 space-y-1 text-sm">
@@ -811,6 +822,29 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
             <div className="space-y-4">
               <section className="rounded-lg border border-slate-200 p-4">
                 <h4 className="text-sm font-semibold uppercase tracking-wide text-muted">Manage Order</h4>
+                {String(order.orderStatus || "").toLowerCase() === "cancelled" ? (
+                  <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-4">
+                    <p className="text-sm font-semibold text-red-700">Order Cancelled (Locked)</p>
+                    <p className="mt-1 text-xs text-red-600">
+                      This order has been cancelled and can no longer be modified.
+                    </p>
+                    {order.cancellationReason ? (
+                      <p className="mt-2 text-xs text-slate-700">
+                        <span className="font-semibold">Reason:</span> {order.cancellationReason}
+                      </p>
+                    ) : null}
+                    {order.cancelledBy ? (
+                      <p className="mt-1 text-xs text-slate-700">
+                        <span className="font-semibold">Cancelled by:</span> {order.cancelledBy}
+                      </p>
+                    ) : null}
+                    {order.cancelledAt ? (
+                      <p className="mt-1 text-xs text-slate-700">
+                        <span className="font-semibold">Cancelled at:</span> {formatDateTime(order.cancelledAt)}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
                 <div className="mt-3 grid gap-3">
                   <label className="text-sm">
                     <span className="mb-1 block font-semibold">Order Status</span>
@@ -846,6 +880,11 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
                   <label className="text-sm">
                     <span className="mb-1 block font-semibold">Status Note</span>
                     <input value={form.statusNote} onChange={(event) => setForm((prev) => ({ ...prev, statusNote: event.target.value }))} className="w-full rounded-lg border border-slate-300 px-3 py-2" placeholder="Optional status note" />
+                    {form.orderStatus === "cancelled" ? (
+                      <span className="mt-1 block text-xs text-red-600">
+                        This note will be saved as the cancellation reason.
+                      </span>
+                    ) : null}
                   </label>
 
                   <label className="text-sm">
@@ -857,6 +896,7 @@ function OrderDetailsModal({ order, open, onClose, onOrderUpdated, loading = fal
                     {saving ? "Saving..." : "Save Changes"}
                   </button>
                 </div>
+                )}
               </section>
 
               <section className="rounded-lg border border-slate-200 p-4">

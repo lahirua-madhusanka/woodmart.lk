@@ -1,6 +1,7 @@
 import { body } from "express-validator";
 import express from "express";
 import {
+  cancelOrder,
   createOrder,
   createPaymentIntent,
   deleteCheckoutAddress,
@@ -67,5 +68,18 @@ router.delete("/address-book/:id", deleteCheckoutAddress);
 
 router.get("/user", getUserOrders);
 router.get("/:id", getOrderById);
+router.post(
+  "/:id/cancel",
+  [
+    body("reason")
+      .trim()
+      .notEmpty()
+      .withMessage("Cancellation reason is required")
+      .isLength({ min: 3, max: 500 })
+      .withMessage("Cancellation reason must be between 3 and 500 characters"),
+  ],
+  validateRequest,
+  cancelOrder
+);
 
 export default router;

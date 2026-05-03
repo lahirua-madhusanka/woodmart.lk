@@ -1,8 +1,9 @@
 import EmptyState from "./EmptyState";
 
 const COURIER_TRACKING_URL = "https://www.prontolanka.lk/";
+const CANCELLABLE_STATUSES = new Set(["pending", "processing"]);
 
-function OrdersTable({ orders = [], loading, onViewDetails }) {
+function OrdersTable({ orders = [], loading, onViewDetails, onCancelOrder }) {
   const handleCopyTracking = async (trackingNumber) => {
     if (!trackingNumber) return;
     try {
@@ -80,6 +81,15 @@ function OrdersTable({ orders = [], loading, onViewDetails }) {
                 >
                   View Details
                 </button>
+                {onCancelOrder && CANCELLABLE_STATUSES.has(String(order.orderStatus || "").toLowerCase()) ? (
+                  <button
+                    type="button"
+                    onClick={() => onCancelOrder(order)}
+                    className="ml-2 rounded-lg border border-red-500 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                  >
+                    Cancel
+                  </button>
+                ) : null}
               </td>
             </tr>
           ))}

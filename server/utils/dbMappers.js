@@ -135,6 +135,8 @@ export const mapOrder = (row, options = {}) => {
     deliveredAt: row.delivered_at || null,
     returnedAt: row.returned_at || null,
     cancelledAt: row.cancelled_at || null,
+    cancellationReason: row.cancellation_reason || "",
+    cancelledBy: row.cancelled_by || null,
     trackingAddedAt: row.tracking_added_at || null,
     invoiceNumber: row.invoice_number || "",
     shippingAddress: shipping

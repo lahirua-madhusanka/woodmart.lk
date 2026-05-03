@@ -3,7 +3,11 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useStorefrontSettings } from "../context/StorefrontSettingsContext";
 import { getApiErrorMessage } from "../services/apiClient";
-import { getUserOrdersApi } from "../services/orderService";
+import { cancelOrderApi, getUserOrdersApi } from "../services/orderService";
+import CancelOrderModal from "../components/orders/CancelOrderModal";
+
+const CANCELLABLE_STATUSES = new Set(["pending", "processing"]);
+const NON_CANCELLABLE_STATUSES = new Set(["shipped", "out_for_delivery", "delivered", "cancelled", "returned"]);
 
 const COURIER_TRACKING_URL = "https://www.prontolanka.lk/";
 const ORDER_ITEM_PLACEHOLDER =
@@ -21,6 +25,8 @@ function OrdersPage() {
   const { formatMoney } = useStorefrontSettings();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const handleCopyTracking = async (trackingNumber) => {
     if (!trackingNumber) return;
@@ -46,6 +52,21 @@ function OrdersPage() {
 
     loadOrders();
   }, []);
+
+  const handleConfirmCancel = async (reason) => {
+    if (!cancelTarget?._id) return;
+    setCancelling(true);
+    try {
+      const updated = await cancelOrderApi(cancelTarget._id, reason);
+      setOrders((prev) => prev.map((o) => (o._id === updated._id ? updated : o)));
+      toast.success("Order cancelled successfully");
+      setCancelTarget(null);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setCancelling(false);
+    }
+  };
 
   return (
     <section className="container-pad py-10">
@@ -132,6 +153,20 @@ function OrdersPage() {
                     Review
                   </Link>
                 ) : null}
+                {CANCELLABLE_STATUSES.has(String(order.orderStatus || "").toLowerCase()) ? (
+                  <button
+                    type="button"
+                    onClick={() => setCancelTarget(order)}
+                    className="rounded-lg border border-red-500 px-3 py-1.5 text-xs font-semibold text-red-600 hover:bg-red-50"
+                  >
+                    Cancel Order
+                  </button>
+                ) : NON_CANCELLABLE_STATUSES.has(String(order.orderStatus || "").toLowerCase()) &&
+                  String(order.orderStatus || "").toLowerCase() !== "cancelled" &&
+                  String(order.orderStatus || "").toLowerCase() !== "delivered" &&
+                  String(order.orderStatus || "").toLowerCase() !== "returned" ? (
+                  <span className="text-xs text-muted">Order cannot be cancelled after shipping</span>
+                ) : null}
                 {order.trackingNumber ? (
                   <>
                     <button
@@ -155,6 +190,14 @@ function OrdersPage() {
           ))}
         </div>
       )}
+
+      <CancelOrderModal
+        open={Boolean(cancelTarget)}
+        orderId={cancelTarget?._id}
+        onClose={() => (cancelling ? null : setCancelTarget(null))}
+        onConfirm={handleConfirmCancel}
+        submitting={cancelling}
+      />
     </section>
   );
 }

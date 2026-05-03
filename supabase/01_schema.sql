@@ -571,6 +571,8 @@ create table if not exists public.orders (
   delivered_at timestamptz,
   returned_at timestamptz,
   cancelled_at timestamptz,
+  cancellation_reason text,
+  cancelled_by text check (cancelled_by in ('user', 'admin')),
   invoice_number text,
   coupon_id uuid,
   coupon_code text,
@@ -605,6 +607,8 @@ alter table public.orders add column if not exists out_for_delivery_at timestamp
 alter table public.orders add column if not exists delivered_at timestamptz;
 alter table public.orders add column if not exists returned_at timestamptz;
 alter table public.orders add column if not exists cancelled_at timestamptz;
+alter table public.orders add column if not exists cancellation_reason text;
+alter table public.orders add column if not exists cancelled_by text check (cancelled_by in ('user', 'admin'));
 alter table public.orders add column if not exists invoice_number text;
 update public.orders set payment_method = 'cod' where payment_method is null;
 update public.orders set subtotal_amount = coalesce(total_amount, 0) where subtotal_amount is null;

@@ -37,7 +37,7 @@ function CartPage() {
                 <img
                   src={item.variation?.imageUrl || (item.images && item.images[0]) || item.image}
                   alt={item.name}
-                  className="h-24 w-full rounded-lg object-cover"
+                  className="h-24 w-24 rounded-lg object-cover"
                 />
 
                 <div>

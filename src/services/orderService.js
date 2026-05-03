@@ -39,3 +39,8 @@ export const deleteCheckoutAddressApi = async (id) => {
   const { data } = await apiClient.delete(`/orders/address-book/${id}`);
   return data;
 };
+
+export const cancelOrderApi = async (id, reason) => {
+  const { data } = await apiClient.post(`/orders/${id}/cancel`, { reason });
+  return data;
+};
