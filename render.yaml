@@ -48,3 +48,5 @@ services:
         sync: false
       - key: BREVO_SENDER_NAME
         sync: false
+      - key: EMAIL_DEBUG_LOG
+        value: true

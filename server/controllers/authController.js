@@ -566,8 +566,17 @@ export const forgotPassword = asyncHandler(async (req, res) => {
       name: user.name,
       resetUrl: buildPasswordResetUrl(req, token),
     });
-  } catch {
-    // Intentionally return a generic response to avoid account enumeration.
+  } catch (emailErr) {
+    // Do not expose error to client (prevents account enumeration).
+    // Log for server-side debugging.
+    authLog("password_reset_email_failed", {
+      userId: user.id,
+      email: user.email,
+      message: emailErr?.message || "Unknown error",
+      statusCode: emailErr?.statusCode || null,
+      code: emailErr?.code || null,
+      providerStatus: emailErr?.providerStatus || null,
+    });
   }
 
   return res.json({ message: genericMessage });
