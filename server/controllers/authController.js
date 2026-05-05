@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import env from "../config/env.js";
 import supabase from "../config/supabase.js";
 import { mapProduct, mapUser } from "../utils/dbMappers.js";
-import { sendPasswordResetEmail } from "../utils/email.js";
+import { sendPasswordResetEmail } from "../services/brevoTransactionalEmailService.js";
 import { sendVerificationEmail } from "../services/brevoVerificationEmailService.js";
 
 const signToken = (id) => jwt.sign({ id }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
