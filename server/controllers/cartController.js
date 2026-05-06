@@ -33,6 +33,11 @@ const isMissingColumnError = (message = "") => {
   return lowered.includes("could not find") && lowered.includes("column");
 };
 
+const isUniqueConstraintError = (message = "") => {
+  const lowered = String(message || "").toLowerCase();
+  return lowered.includes("duplicate key") || lowered.includes("unique constraint");
+};
+
 const getOrCreateCart = async (userId) => {
   const { data: existing, error: existingError } = await supabase
     .from("carts")
@@ -248,8 +253,12 @@ export const addToCart = asyncHandler(async (req, res) => {
     });
 
     if (insertError) {
+      if (isUniqueConstraintError(insertError.message)) {
+        res.status(400);
+        throw new Error("This item is already in your cart");
+      }
       res.status(500);
-      throw new Error(insertError.message);
+      throw new Error("Failed to add item to cart");
     }
   }
 
@@ -277,7 +286,7 @@ export const updateCartItem = asyncHandler(async (req, res) => {
 
   if (itemError) {
     res.status(500);
-    throw new Error(itemError.message);
+    throw new Error("Failed to retrieve cart item");
   }
 
   if (!item) {
@@ -293,7 +302,7 @@ export const updateCartItem = asyncHandler(async (req, res) => {
 
     if (deleteError) {
       res.status(500);
-      throw new Error(deleteError.message);
+      throw new Error("Failed to remove cart item");
     }
   } else {
     if (!variationId) {
@@ -309,7 +318,7 @@ export const updateCartItem = asyncHandler(async (req, res) => {
 
     if (variationError) {
       res.status(500);
-      throw new Error(variationError.message);
+      throw new Error("Failed to validate product variation");
     }
 
     if (!variation || String(variation.product_id) !== String(productId)) {
@@ -329,7 +338,7 @@ export const updateCartItem = asyncHandler(async (req, res) => {
 
     if (updateError) {
       res.status(500);
-      throw new Error(updateError.message);
+      throw new Error("Failed to update cart item");
     }
   }
 
@@ -356,7 +365,7 @@ export const removeCartItem = asyncHandler(async (req, res) => {
   const { data: target, error: targetError } = await itemQuery.maybeSingle();
   if (targetError) {
     res.status(500);
-    throw new Error(targetError.message);
+    throw new Error("Failed to retrieve cart item");
   }
 
   if (!target) {
@@ -371,7 +380,7 @@ export const removeCartItem = asyncHandler(async (req, res) => {
 
   if (error) {
     res.status(500);
-    throw new Error(error.message);
+    throw new Error("Failed to remove cart item");
   }
 
   const formatted = await loadCart(req.user._id);

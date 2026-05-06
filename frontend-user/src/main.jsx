@@ -8,6 +8,7 @@ import { ChatRealtimeProvider } from "../../src/context/ChatRealtimeContext";
 import { StorefrontSettingsProvider } from "../../src/context/StorefrontSettingsContext";
 import { UserAuthProvider } from "../../src/context/UserAuthContext";
 import UserApp from "../../src/apps/UserApp";
+import { Analytics } from "@vercel/analytics/react";
 import "../../src/index.css";
 import "react-toastify/dist/ReactToastify.css";
 import { StoreProvider } from "../../src/context/StoreContext";
@@ -55,6 +56,7 @@ ReactDOM.createRoot(document.getElementById("root")).render(
                 <ChatRealtimeProvider>
                   <StoreProvider>
                     <UserApp />
+                    <Analytics />
                     <ToastContainer
                       position="top-right"
                       autoClose={2500}
