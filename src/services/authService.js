@@ -59,3 +59,8 @@ export const resetPasswordApi = async (payload) => {
   const { data } = await apiClient.post("/auth/reset-password", payload);
   return data;
 };
+
+export const googleLoginApi = async (access_token) => {
+  const { data } = await apiClient.post("/auth/google", { access_token });
+  return data;
+};

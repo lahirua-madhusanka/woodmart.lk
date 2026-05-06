@@ -135,6 +135,10 @@ update public.users set email_verified = true where email_verified is null;
 alter table public.users alter column email_verified set default false;
 alter table public.users alter column email_verified set not null;
 
+-- Google OAuth columns
+alter table public.users add column if not exists provider text not null default 'email';
+alter table public.users add column if not exists avatar_url text;
+
 create index if not exists idx_users_email_verification_token_hash on public.users(email_verification_token_hash);
 
 create table if not exists public.verification_tokens (

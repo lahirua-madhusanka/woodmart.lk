@@ -4,6 +4,8 @@ export const mapUser = (row) => ({
   name: row.name,
   email: row.email,
   role: row.role,
+  provider: row.provider || "email",
+  avatarUrl: row.avatar_url || null,
   emailVerified: row.email_verified ?? true,
   emailVerifiedAt: row.email_verified_at || null,
   createdAt: row.created_at,

@@ -2,11 +2,14 @@ import asyncHandler from "express-async-handler";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
+import { OAuth2Client } from "google-auth-library";
 import env from "../config/env.js";
 import supabase from "../config/supabase.js";
 import { mapProduct, mapUser } from "../utils/dbMappers.js";
 import { sendPasswordResetEmail } from "../services/brevoTransactionalEmailService.js";
 import { sendVerificationEmail } from "../services/brevoVerificationEmailService.js";
+
+const googleOAuthClient = new OAuth2Client(env.googleClientId);
 
 const signToken = (id) => jwt.sign({ id }, env.jwtSecret, { expiresIn: env.jwtExpiresIn });
 const EMAIL_VERIFICATION_TTL_HOURS = Math.max(1, Number(env.emailVerificationTtlHours || 1));
@@ -249,7 +252,7 @@ export const loginUser = asyncHandler(async (req, res) => {
 
   const { data: localUser, error: localUserError } = await supabase
     .from("users")
-    .select("id, name, email, role, password_hash, email_verified, email_verified_at, created_at, updated_at")
+    .select("id, name, email, role, password_hash, email_verified, email_verified_at, provider, avatar_url, created_at, updated_at")
     .eq("email", normalizedEmail)
     .maybeSingle();
 
@@ -263,9 +266,9 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new Error("Invalid email or password");
   }
 
-  if (!localUser.password_hash || localUser.password_hash === "SUPABASE_AUTH_MANAGED") {
+  if (!localUser.password_hash || localUser.password_hash === "SUPABASE_AUTH_MANAGED" || localUser.password_hash === "GOOGLE_AUTH_MANAGED") {
     res.status(400);
-    throw new Error("This account is not eligible for password login. Please reset your password.");
+    throw new Error("This account uses Google Sign-In. Please continue with Google.");
   }
 
   const validPassword = await bcrypt.compare(password, localUser.password_hash);
@@ -291,7 +294,7 @@ export const loginUser = asyncHandler(async (req, res) => {
 export const getProfile = asyncHandler(async (req, res) => {
   const { data: user, error: userError } = await supabase
     .from("users")
-    .select("id, name, email, role, email_verified, email_verified_at, created_at, updated_at")
+    .select("id, name, email, role, email_verified, email_verified_at, provider, avatar_url, created_at, updated_at")
     .eq("id", req.user._id)
     .single();
 
@@ -877,3 +880,106 @@ export const resendVerificationEmail = asyncHandler(async (req, res) => {
   return res.json({ message: "Verification email sent. Please check your inbox." });
 });
 
+const USER_SELECT = "id, name, email, role, email_verified, email_verified_at, provider, avatar_url, created_at, updated_at";
+
+export const googleAuth = asyncHandler(async (req, res) => {
+  const { access_token } = req.body;
+
+  if (!access_token) {
+    res.status(400);
+    throw new Error("Google access token is required");
+  }
+
+  // Verify by calling Google's userinfo endpoint server-side
+  let googleUser;
+  try {
+    const googleRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${access_token}` },
+    });
+    if (!googleRes.ok) {
+      res.status(401);
+      throw new Error("Invalid or expired Google token");
+    }
+    googleUser = await googleRes.json();
+  } catch (err) {
+    if (err.statusCode) throw err;
+    res.status(401);
+    throw new Error("Failed to verify Google token");
+  }
+
+  const { email, name, picture, email_verified: googleEmailVerified } = googleUser;
+
+  if (!googleEmailVerified) {
+    res.status(401);
+    throw new Error("Your Google account email is not verified");
+  }
+
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) {
+    res.status(400);
+    throw new Error("Could not retrieve email from Google account");
+  }
+
+  const { data: existingUser, error: lookupError } = await supabase
+    .from("users")
+    .select(`${USER_SELECT}, password_hash`)
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+
+  if (lookupError) {
+    res.status(500);
+    throw new Error(lookupError.message);
+  }
+
+  if (existingUser) {
+    const updates = {
+      email_verified: true,
+      email_verified_at: existingUser.email_verified_at || new Date().toISOString(),
+      avatar_url: existingUser.avatar_url || picture || null,
+    };
+    if (existingUser.password_hash === "GOOGLE_AUTH_MANAGED") {
+      updates.provider = "google";
+    }
+
+    await supabase.from("users").update(updates).eq("id", existingUser.id);
+
+    const token = signToken(existingUser.id);
+    setAuthCookie(res, token);
+    authLog("google_login_success", { userId: existingUser.id, email: normalizedEmail });
+
+    return res.json({
+      token,
+      user: mapUser({ ...existingUser, ...updates }),
+    });
+  }
+
+  // New user — create with Google provider
+  const { data: newUser, error: createError } = await supabase
+    .from("users")
+    .insert({
+      name: name || getDefaultNameFromEmail(normalizedEmail),
+      email: normalizedEmail,
+      password_hash: "GOOGLE_AUTH_MANAGED",
+      role: "user",
+      email_verified: true,
+      email_verified_at: new Date().toISOString(),
+      provider: "google",
+      avatar_url: picture || null,
+    })
+    .select(USER_SELECT)
+    .single();
+
+  if (createError || !newUser) {
+    res.status(500);
+    throw new Error(createError?.message || "Failed to create account");
+  }
+
+  const token = signToken(newUser.id);
+  setAuthCookie(res, token);
+  authLog("google_register_success", { userId: newUser.id, email: normalizedEmail });
+
+  return res.status(201).json({
+    token,
+    user: mapUser(newUser),
+  });
+});

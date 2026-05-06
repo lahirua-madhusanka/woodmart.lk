@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import {
   changePasswordApi,
+  googleLoginApi,
   loginApi,
   logoutApi,
   profileApi,
@@ -112,6 +113,21 @@ export function UserAuthProvider({ children }) {
     }
   };
 
+  const loginWithGoogle = async (access_token) => {
+    try {
+      const response = await googleLoginApi(access_token);
+      localStorage.setItem(USER_SESSION_KEY, response.token);
+      setToken(response.token);
+      setUser(response.user);
+      toast.success("Signed in with Google");
+      return response.user;
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      toast.error(message);
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
       await logoutApi();
@@ -204,6 +220,7 @@ export function UserAuthProvider({ children }) {
       isAuthenticated: Boolean(user && token),
       register,
       login,
+      loginWithGoogle,
       logout,
       refreshProfile,
       updateProfile,

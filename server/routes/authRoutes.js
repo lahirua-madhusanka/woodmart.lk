@@ -4,6 +4,7 @@ import {
   changePassword,
   forgotPassword,
   getProfile,
+  googleAuth,
   loginUser,
   logoutUser,
   registerUser,
@@ -53,6 +54,7 @@ router.post(
 
 router.get("/verify-email", verifyEmail);
 router.post("/verify-email", verifyEmail);
+router.post("/google", googleAuth);
 router.post(
   "/resend-verification",
   [body("email").isEmail().withMessage("Valid email is required")],

@@ -58,6 +58,7 @@ const env = {
   orderEmailSupportEmail: clean(process.env.ORDER_EMAIL_SUPPORT_EMAIL || process.env.BREVO_SENDER_EMAIL || process.env.SMTP_FROM || process.env.SMTP_USER),
   emailVerificationTtlHours: Number(process.env.EMAIL_VERIFICATION_TTL_HOURS || 1),
   brevoNewsletterListId: Number(process.env.BREVO_NEWSLETTER_LIST_ID || 0),
+  googleClientId: clean(process.env.GOOGLE_CLIENT_ID),
 };
 
 export default env;

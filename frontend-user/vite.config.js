@@ -10,9 +10,10 @@ export default defineConfig({
   base: process.env.VITE_BASE_PATH || "/",
   plugins: [react()],
   resolve: {
-    dedupe: ["react", "react-dom"],
+    dedupe: ["react", "react-dom", "@react-oauth/google"],
     alias: {
       "@shared": path.resolve(__dirname, "../src"),
+      "@react-oauth/google": path.resolve(__dirname, "../node_modules/@react-oauth/google"),
       react: path.resolve(__dirname, "../node_modules/react"),
       "react-dom": path.resolve(__dirname, "../node_modules/react-dom"),
     },
