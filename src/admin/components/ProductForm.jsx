@@ -8,6 +8,7 @@ const defaultForm = {
   category: "",
   brand: "",
   status: "active",
+  shippingPrice: "",
 };
 
 const createEmptyVariation = () => ({
@@ -52,6 +53,7 @@ function ProductForm({
       ...initialValues,
       brand: initialValues?.brand ?? "",
       status: initialValues?.status || "active",
+      shippingPrice: initialValues?.shippingPrice == null ? "" : String(initialValues.shippingPrice),
     };
 
     setFormState(next);
@@ -288,6 +290,7 @@ function ProductForm({
       category: formState.category.trim(),
       brand: formState.brand.trim(),
       status: formState.status,
+      shippingPrice: formState.shippingPrice === "" ? 0 : Number(formState.shippingPrice),
       existingImages,
       imageFiles: selectedFiles.map((item) => item.file),
       variations: variations.map((variation) => ({
@@ -374,6 +377,20 @@ function ProductForm({
             <option value="draft">Draft</option>
             <option value="archived">Archived</option>
           </select>
+        </label>
+
+        <label className="text-sm text-muted">
+          Shipping Price
+          <input
+            type="number"
+            name="shippingPrice"
+            min="0"
+            step="0.01"
+            value={formState.shippingPrice}
+            onChange={handleInputChange}
+            placeholder="0.00"
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+          />
         </label>
       </div>
 

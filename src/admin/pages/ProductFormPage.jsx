@@ -96,6 +96,7 @@ function ProductFormPage() {
         category: payload.category,
         brand: payload.brand,
         status: payload.status,
+        shippingPrice: payload.shippingPrice ?? 0,
         images: finalImages,
         variations: finalVariations,
       };
