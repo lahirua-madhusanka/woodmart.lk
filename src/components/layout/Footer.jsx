@@ -17,14 +17,14 @@ function Footer() {
             Crafted with quality materials and timeless details.
           </p>
           <div className="mt-5 flex items-center gap-2 text-slate-600">
-            <a href="#" className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold transition hover:bg-brand hover:text-white">
+            <a href="https://www.instagram.com/woodmart.lk" target="_blank" rel="noopener noreferrer" className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold transition hover:bg-brand hover:text-white">
               IG
             </a>
-            <a href="#" className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold transition hover:bg-brand hover:text-white">
+            <a href="https://www.facebook.com/woodmart.lk" target="_blank" rel="noopener noreferrer" className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold transition hover:bg-brand hover:text-white">
               FB
             </a>
-            <a href="#" className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold transition hover:bg-brand hover:text-white">
-              X
+            <a href="https://www.daraz.lk/shop/woodmartlk" target="_blank" rel="noopener noreferrer" className="rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold transition hover:bg-brand hover:text-white">
+              DARAZ
             </a>
           </div>
         </div>
