@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import { Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom";
+import { Analytics } from "@vercel/analytics/react";
 import PrivateRoute from "./components/auth/PrivateRoute";
 import PageFallbackLoader from "./components/common/PageFallbackLoader";
 import MainLayout from "./components/layout/MainLayout";
@@ -90,6 +91,7 @@ function App() {
   return (
     <>
       <ScrollToTop />
+      <Analytics />
       <Routes>
       <Route path="/admin/login" element={withSuspense(<AdminLoginPage />, "Loading admin login...")} />
       <Route
