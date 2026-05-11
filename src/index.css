@@ -57,3 +57,103 @@ a {
 .btn-secondary {
   @apply inline-flex items-center justify-center rounded-lg border border-brand px-5 py-3 text-sm font-semibold text-brand transition hover:bg-brand hover:text-white;
 }
+
+/* Product description — premium ecommerce typography */
+.product-description {
+  color: #374151;
+  font-size: 0.8445rem;
+  line-height: 1.85;
+}
+
+.product-description p {
+  color: #374151;
+  margin-bottom: 1.1rem;
+  line-height: 1.85;
+}
+
+.product-description h2,
+.product-description h3,
+.product-description h4 {
+  font-family: "Fraunces", serif;
+  color: #111827;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin-top: 1.75rem;
+  margin-bottom: 0.625rem;
+}
+
+.product-description h2 { font-size: 1.2rem; }
+.product-description h3 { font-size: 1.05rem; }
+.product-description h4 { font-size: 0.975rem; }
+
+.product-description ul {
+  list-style: none;
+  padding-left: 0;
+  margin-bottom: 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.product-description ul li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  color: #374151;
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.product-description ul li::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  min-width: 6px;
+  border-radius: 50%;
+  background: var(--brand);
+  margin-top: 0.45rem;
+}
+
+.product-description ol {
+  padding-left: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.product-description ol li {
+  color: #374151;
+  margin-bottom: 0.5rem;
+  line-height: 1.75;
+  padding-left: 0.25rem;
+}
+
+.product-description ol li::marker {
+  color: var(--brand);
+  font-weight: 600;
+}
+
+.product-description strong,
+.product-description b {
+  color: #1f2937;
+  font-weight: 600;
+}
+
+.product-description a {
+  color: var(--brand);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (max-width: 640px) {
+  .product-description {
+    font-size: 0.9375rem;
+    line-height: 1.8;
+  }
+
+  .product-description ul li {
+    font-size: 0.875rem;
+  }
+}

@@ -145,7 +145,7 @@ function HomePage() {
         fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}
       >
         <Suspense fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}>
-          <StorefrontBannerSection section="promo_strip" columns={2} containerClassName="container-pad py-10" />
+          <StorefrontBannerSection section="promo_strip" columns={2} containerClassName="container-pad py-8" />
         </Suspense>
       </LazySection>
 

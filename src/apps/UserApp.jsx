@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import PrivateRoute from "../components/auth/PrivateRoute";
 import PageFallbackLoader from "../components/common/PageFallbackLoader";
 import ScrollToTop from "../components/common/ScrollToTop";
+import WelcomePopup from "../components/common/WelcomePopup";
 import MainLayout from "../components/layout/MainLayout";
 
 const HomePage = lazy(() => import("../pages/HomePage"));
@@ -47,6 +48,7 @@ function UserApp() {
   return (
     <>
       <ScrollToTop />
+      <WelcomePopup />
       <Routes>
       <Route path="/" element={<MainLayout />}>
         <Route index element={withSuspense(<HomePage />, "Loading home...")} />

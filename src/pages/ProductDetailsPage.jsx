@@ -667,7 +667,7 @@ function ProductDetailsPage() {
         </div>
         {activeTab === "description" ? (
           <div
-            className="text-sm leading-relaxed text-muted prose prose-slate max-w-none"
+            className="product-description prose prose-slate max-w-none"
             dangerouslySetInnerHTML={renderSanitizedDescription(product.description)}
           />
         ) : activeTab === "additional" ? (

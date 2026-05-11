@@ -19,6 +19,10 @@ import {
   updateUserRoleAdmin,
 } from "../controllers/adminController.js";
 import {
+  getAdminWelcomePopup,
+  updateAdminWelcomePopup,
+} from "../controllers/welcomePopupController.js";
+import {
   createAdminBanner,
   deleteAdminBanner,
   getAdminBanners,
@@ -397,6 +401,22 @@ router.delete(
   [param("id").isUUID().withMessage("Invalid inquiry id")],
   validateRequest,
   deleteAdminContactMessage
+);
+
+router.get("/welcome-popup", getAdminWelcomePopup);
+router.put(
+  "/welcome-popup",
+  [
+    body("isActive").isBoolean().withMessage("isActive must be a boolean"),
+    body("title").trim().notEmpty().withMessage("Title is required").isLength({ max: 255 }),
+    body("description").trim().notEmpty().withMessage("Description is required").isLength({ max: 1000 }),
+    body("couponCode").trim().notEmpty().withMessage("Coupon code is required").isLength({ max: 50 }),
+    body("buttonText").trim().notEmpty().withMessage("Button text is required").isLength({ max: 100 }),
+    body("imageUrl").optional({ nullable: true, checkFalsy: true }).isURL().withMessage("Image URL must be a valid URL"),
+    body("delaySeconds").isInt({ min: 0, max: 30 }).withMessage("Delay must be between 0 and 30 seconds"),
+  ],
+  validateRequest,
+  updateAdminWelcomePopup
 );
 
 export default router;

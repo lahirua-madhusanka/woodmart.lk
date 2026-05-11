@@ -23,6 +23,7 @@ import reviewRoutes from "./routes/reviewRoutes.js";
 import newsletterRoutes from "./routes/newsletterRoutes.js";
 import seedRoutes from "./routes/seedRoutes.js";
 import storefrontRoutes from "./routes/storefrontRoutes.js";
+import welcomePopupRoutes from "./routes/welcomePopupRoutes.js";
 import wishlistRoutes from "./routes/wishlistRoutes.js";
 
 const app = express();
@@ -70,6 +71,7 @@ app.use("/api/custom-projects", customProjectRoutes);
 app.use("/api/newsletter", newsletterRoutes);
 app.use("/api/seed", seedRoutes);
 app.use("/api/store", storefrontRoutes);
+app.use("/api/welcome-popup", welcomePopupRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -14,6 +14,7 @@ import {
   Image,
   TicketPercent,
   Megaphone,
+  Gift,
   Settings,
 } from "lucide-react";
 import { useChatRealtime } from "../../context/ChatRealtimeContext";
@@ -33,6 +34,7 @@ const links = [
   { to: "/admin/banners", label: "Banners", icon: Image },
   { to: "/admin/coupons", label: "Coupons", icon: TicketPercent },
   { to: "/admin/promotions", label: "Promotions", icon: Megaphone },
+  { to: "/admin/welcome-popup", label: "Welcome Popup", icon: Gift },
   { to: "/admin/settings", label: "Settings", icon: Settings },
 ];
 

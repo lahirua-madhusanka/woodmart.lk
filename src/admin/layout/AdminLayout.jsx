@@ -15,6 +15,7 @@ const mobileLinks = [
   { to: "/admin/reviews", label: "Reviews" },
   { to: "/admin/banners", label: "Banners" },
   { to: "/admin/coupons", label: "Coupons" },
+  { to: "/admin/welcome-popup", label: "Welcome Popup" },
   { to: "/admin/settings", label: "Settings" },
 ];
 
