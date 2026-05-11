@@ -5,6 +5,7 @@ import PageFallbackLoader from "./components/common/PageFallbackLoader";
 import MainLayout from "./components/layout/MainLayout";
 import AdminProtectedRoute from "./admin/routes/AdminProtectedRoute";
 import ScrollToTop from "./components/common/ScrollToTop";
+import WelcomePopup from "./components/common/WelcomePopup";
 
 // Route-level splitting keeps the initial storefront payload small.
 const HomePage = lazy(() => import("./pages/HomePage"));
@@ -54,6 +55,7 @@ const AdminCouponsPage = lazy(() => import("./admin/pages/CouponsPage"));
 const AdminPromotionsPage = lazy(() => import("./admin/pages/PromotionsPage"));
 const AdminCustomRequestsPage = lazy(() => import("./admin/pages/CustomRequestsPage"));
 const AdminSettingsPage = lazy(() => import("./admin/pages/SettingsPage"));
+const AdminWelcomePopupPage = lazy(() => import("./admin/pages/WelcomePopupPage"));
 
 const withSuspense = (node, label) => (
   <Suspense fallback={<PageFallbackLoader label={label} />}>{node}</Suspense>
@@ -90,6 +92,7 @@ function App() {
   return (
     <>
       <ScrollToTop />
+      <WelcomePopup />
       <Routes>
       <Route path="/admin/login" element={withSuspense(<AdminLoginPage />, "Loading admin login...")} />
       <Route
@@ -116,6 +119,7 @@ function App() {
         <Route path="banners" element={withSuspense(<AdminBannersPage />, "Loading banners...")} />
         <Route path="coupons" element={withSuspense(<AdminCouponsPage />, "Loading coupons...")} />
         <Route path="promotions" element={withSuspense(<AdminPromotionsPage />, "Loading promotions...")} />
+        <Route path="welcome-popup" element={withSuspense(<AdminWelcomePopupPage />, "Loading welcome popup...")} />
         <Route path="settings" element={withSuspense(<AdminSettingsPage />, "Loading settings...")} />
         <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
       </Route>
