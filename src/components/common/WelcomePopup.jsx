@@ -5,58 +5,83 @@ import apiClient from "../../services/apiClient";
 import { useUserAuth } from "../../context/UserAuthContext";
 
 const STORAGE_KEY = "wm_welcome_popup_seen";
+// If auth check takes longer than this (ms), treat visitor as a guest and proceed.
+// Handles Render free-tier cold starts where the profile API can hang for 30s+.
+const AUTH_TIMEOUT_MS = 5000;
 
 function WelcomePopup() {
   const { user, loading: authLoading } = useUserAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ?preview_popup=1 in the URL forces the popup regardless of auth/localStorage
+  // ?preview_popup=1 → bypass all checks, useful for production testing
   const isPreview = new URLSearchParams(location.search).get("preview_popup") === "1";
 
   const [popup, setPopup] = useState(null);
   const [visible, setVisible] = useState(false);
   const [animateIn, setAnimateIn] = useState(false);
+  // true once AUTH_TIMEOUT_MS elapses — treats visitor as guest even if auth is still loading
+  const [authTimedOut, setAuthTimedOut] = useState(false);
   const timerRef = useRef(null);
   const scrollTriggeredRef = useRef(false);
+  const mountedRef = useRef(false);
 
-  // Fetch popup data from backend
+  // Log on first render (synchronous, tells us the component actually mounted)
+  if (!mountedRef.current) {
+    mountedRef.current = true;
+    // eslint-disable-next-line no-console
+    console.log("[WelcomePopup] component mounted");
+  }
+
+  // Auth timeout fallback — in case auth check hangs (Render cold start etc.)
+  useEffect(() => {
+    const t = setTimeout(() => {
+      // eslint-disable-next-line no-console
+      console.log("[WelcomePopup] auth timeout reached — treating visitor as guest");
+      setAuthTimedOut(true);
+    }, AUTH_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, []);
+
+  // Cancel the auth timeout once auth resolves
+  useEffect(() => {
+    if (!authLoading) {
+      setAuthTimedOut(false); // auth resolved normally, no need for timeout
+    }
+  }, [authLoading]);
+
+  // Fetch popup config from backend
   useEffect(() => {
     let cancelled = false;
-
     const fetchPopup = async () => {
       try {
         const { data } = await apiClient.get("/welcome-popup");
         // eslint-disable-next-line no-console
-        console.log("[WelcomePopup] config loaded:", {
+        console.log("[WelcomePopup] config:", {
           isActive: data?.isActive,
-          couponCode: data?.couponCode,
           delaySeconds: data?.delaySeconds,
-          localStorageSeen: !!localStorage.getItem(STORAGE_KEY),
-          isPreview,
+          couponCode: data?.couponCode,
+          seenBefore: !!localStorage.getItem(STORAGE_KEY),
         });
         if (!cancelled) setPopup(data);
       } catch (err) {
         // eslint-disable-next-line no-console
-        console.error("[WelcomePopup] API failed:", err?.message, "| baseURL:", err?.config?.baseURL, "| url:", err?.config?.url);
+        console.error("[WelcomePopup] API error:", err?.message, {
+          baseURL: err?.config?.baseURL,
+          url: err?.config?.url,
+          status: err?.response?.status,
+        });
       }
     };
-
     fetchPopup();
     return () => { cancelled = true; };
   }, []);
 
   const openPopup = useCallback((preview = false) => {
-    if (!preview && localStorage.getItem(STORAGE_KEY)) {
-      // eslint-disable-next-line no-console
-      console.log("[WelcomePopup] blocked — already seen (localStorage)");
-      return;
-    }
+    if (!preview && localStorage.getItem(STORAGE_KEY)) return;
     if (!preview) localStorage.setItem(STORAGE_KEY, "1");
     setVisible(true);
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => setAnimateIn(true));
-    });
+    requestAnimationFrame(() => requestAnimationFrame(() => setAnimateIn(true)));
   }, []);
 
   const closePopup = useCallback(() => {
@@ -64,41 +89,37 @@ function WelcomePopup() {
     setTimeout(() => setVisible(false), 350);
   }, []);
 
-  // Set up delay timer + scroll trigger
+  // Schedule the popup once all conditions are met
   useEffect(() => {
+    // Preview mode: bypass everything, show in 500ms
     if (isPreview) {
-      // Preview mode: show immediately regardless of all checks
-      timerRef.current = setTimeout(() => openPopup(true), 500);
-      return () => clearTimeout(timerRef.current);
+      const t = setTimeout(() => openPopup(true), 500);
+      return () => clearTimeout(t);
     }
 
-    if (authLoading) {
-      // eslint-disable-next-line no-console
-      console.log("[WelcomePopup] waiting — auth still loading");
-      return;
-    }
-    if (user) {
-      // eslint-disable-next-line no-console
-      console.log("[WelcomePopup] blocked — user is logged in");
-      return;
-    }
-    if (!popup?.isActive) {
-      // eslint-disable-next-line no-console
-      console.log("[WelcomePopup] blocked — isActive is false or popup not loaded yet, popup:", popup);
-      return;
-    }
-    if (localStorage.getItem(STORAGE_KEY)) {
-      // eslint-disable-next-line no-console
-      console.log("[WelcomePopup] blocked — already seen. Run: localStorage.removeItem(\"wm_welcome_popup_seen\") to reset.");
-      return;
-    }
+    const authSettled = !authLoading || authTimedOut;
 
-    const delayMs = (popup.delaySeconds ?? 4) * 1000;
     // eslint-disable-next-line no-console
-    console.log(`[WelcomePopup] scheduling popup in ${delayMs}ms`);
+    console.log("[WelcomePopup] trigger check:", {
+      authSettled,
+      authLoading,
+      authTimedOut,
+      isLoggedIn: !!user,
+      isActive: popup?.isActive,
+      seenBefore: !!localStorage.getItem(STORAGE_KEY),
+      popupLoaded: !!popup,
+    });
+
+    if (!authSettled) return;
+    if (user) return; // logged-in users never see it
+    if (!popup?.isActive) return; // disabled or not loaded yet
+    if (localStorage.getItem(STORAGE_KEY)) return; // already seen
+
+    const delayMs = Math.max(0, (popup.delaySeconds ?? 4)) * 1000;
+    // eslint-disable-next-line no-console
+    console.log(`[WelcomePopup] scheduling in ${delayMs}ms`);
 
     scrollTriggeredRef.current = false;
-
     timerRef.current = setTimeout(() => openPopup(false), delayMs);
 
     const handleScroll = () => {
@@ -109,7 +130,6 @@ function WelcomePopup() {
         openPopup(false);
       }
     };
-
     window.addEventListener("scroll", handleScroll, { passive: true });
 
     return () => {
@@ -117,7 +137,7 @@ function WelcomePopup() {
       window.removeEventListener("scroll", handleScroll);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popup, authLoading, user, isPreview]);
+  }, [popup, authLoading, authTimedOut, user, isPreview]);
 
   const handleCopy = () => {
     if (!popup?.couponCode) return;
@@ -138,7 +158,7 @@ function WelcomePopup() {
     <>
       {/* Backdrop */}
       <div
-        className="fixed inset-0 z-[9998]"
+        className="fixed inset-0 z-[99998]"
         onClick={closePopup}
         style={{
           background: "rgba(10, 8, 20, 0.72)",
@@ -155,7 +175,7 @@ function WelcomePopup() {
         role="dialog"
         aria-modal="true"
         aria-label="Welcome offer"
-        className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+        className="fixed inset-0 z-[99999] flex items-center justify-center p-4"
         style={{ pointerEvents: "none" }}
       >
         <div
