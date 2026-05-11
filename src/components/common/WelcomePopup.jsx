@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import apiClient from "../../services/apiClient";
 import { useUserAuth } from "../../context/UserAuthContext";
@@ -9,6 +9,10 @@ const STORAGE_KEY = "wm_welcome_popup_seen";
 function WelcomePopup() {
   const { user, loading: authLoading } = useUserAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // ?preview_popup=1 in the URL forces the popup regardless of auth/localStorage
+  const isPreview = new URLSearchParams(location.search).get("preview_popup") === "1";
 
   const [popup, setPopup] = useState(null);
   const [visible, setVisible] = useState(false);
@@ -24,27 +28,31 @@ function WelcomePopup() {
       try {
         const { data } = await apiClient.get("/welcome-popup");
         // eslint-disable-next-line no-console
-        console.debug("[WelcomePopup] API response:", data);
+        console.log("[WelcomePopup] config loaded:", {
+          isActive: data?.isActive,
+          couponCode: data?.couponCode,
+          delaySeconds: data?.delaySeconds,
+          localStorageSeen: !!localStorage.getItem(STORAGE_KEY),
+          isPreview,
+        });
         if (!cancelled) setPopup(data);
       } catch (err) {
-        // Non-critical — popup silently skipped on API failure.
-        // Check browser console for the URL being called and the error.
         // eslint-disable-next-line no-console
-        console.warn("[WelcomePopup] Failed to load popup config:", err?.message, err?.config?.baseURL, err?.config?.url);
+        console.error("[WelcomePopup] API failed:", err?.message, "| baseURL:", err?.config?.baseURL, "| url:", err?.config?.url);
       }
     };
 
     fetchPopup();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
-
-  const openPopup = useCallback(() => {
-    if (localStorage.getItem(STORAGE_KEY)) return;
-    localStorage.setItem(STORAGE_KEY, "1");
+  const openPopup = useCallback((preview = false) => {
+    if (!preview && localStorage.getItem(STORAGE_KEY)) {
+      // eslint-disable-next-line no-console
+      console.log("[WelcomePopup] blocked — already seen (localStorage)");
+      return;
+    }
+    if (!preview) localStorage.setItem(STORAGE_KEY, "1");
     setVisible(true);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => setAnimateIn(true));
@@ -57,30 +65,48 @@ function WelcomePopup() {
   }, []);
 
   // Set up delay timer + scroll trigger
-  // Runs whenever popup data, auth state, or user changes.
   useEffect(() => {
-    if (authLoading) return;        // wait for auth to settle first
-    if (user) return;               // logged-in: never show
-    if (!popup?.isActive) return;   // disabled by admin
-    if (localStorage.getItem(STORAGE_KEY)) return; // already seen
+    if (isPreview) {
+      // Preview mode: show immediately regardless of all checks
+      timerRef.current = setTimeout(() => openPopup(true), 500);
+      return () => clearTimeout(timerRef.current);
+    }
+
+    if (authLoading) {
+      // eslint-disable-next-line no-console
+      console.log("[WelcomePopup] waiting — auth still loading");
+      return;
+    }
+    if (user) {
+      // eslint-disable-next-line no-console
+      console.log("[WelcomePopup] blocked — user is logged in");
+      return;
+    }
+    if (!popup?.isActive) {
+      // eslint-disable-next-line no-console
+      console.log("[WelcomePopup] blocked — isActive is false or popup not loaded yet, popup:", popup);
+      return;
+    }
+    if (localStorage.getItem(STORAGE_KEY)) {
+      // eslint-disable-next-line no-console
+      console.log("[WelcomePopup] blocked — already seen. Run: localStorage.removeItem(\"wm_welcome_popup_seen\") to reset.");
+      return;
+    }
 
     const delayMs = (popup.delaySeconds ?? 4) * 1000;
+    // eslint-disable-next-line no-console
+    console.log(`[WelcomePopup] scheduling popup in ${delayMs}ms`);
 
-    // Reset scroll flag each time this effect runs (e.g. after auth resolves)
     scrollTriggeredRef.current = false;
 
-    // Delay timer
-    timerRef.current = setTimeout(() => {
-      openPopup();
-    }, delayMs);
+    timerRef.current = setTimeout(() => openPopup(false), delayMs);
 
-    // Scroll trigger (whichever fires first)
     const handleScroll = () => {
       if (scrollTriggeredRef.current) return;
       if (window.scrollY > 120) {
         scrollTriggeredRef.current = true;
         clearTimeout(timerRef.current);
-        openPopup();
+        openPopup(false);
       }
     };
 
@@ -91,7 +117,7 @@ function WelcomePopup() {
       window.removeEventListener("scroll", handleScroll);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [popup, authLoading, user]);
+  }, [popup, authLoading, user, isPreview]);
 
   const handleCopy = () => {
     if (!popup?.couponCode) return;
