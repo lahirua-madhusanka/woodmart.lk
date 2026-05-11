@@ -4,8 +4,7 @@ import { ArrowRight, BadgePercent, ChevronLeft, ChevronRight } from "lucide-reac
 import RoutePrefetchLink from "../common/RoutePrefetchLink";
 import { useStorefrontSettings } from "../../context/StorefrontSettingsContext";
 
-const DEFAULT_HERO_IMAGE =
-  "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80";
+const DEFAULT_HERO_IMAGE = "";
 
 const AUTOPLAY_MS = 5000;
 
