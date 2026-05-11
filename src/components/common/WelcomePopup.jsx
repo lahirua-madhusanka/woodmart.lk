@@ -36,22 +36,15 @@ function WelcomePopup() {
     };
   }, []);
 
-  const shouldShow = useCallback(() => {
-    if (authLoading) return false;
-    if (user) return false; // logged-in users: never show
-    if (!popup?.isActive) return false;
-    if (localStorage.getItem(STORAGE_KEY)) return false;
-    return true;
-  }, [authLoading, user, popup]);
 
   const openPopup = useCallback(() => {
-    if (!shouldShow()) return;
+    if (localStorage.getItem(STORAGE_KEY)) return;
     localStorage.setItem(STORAGE_KEY, "1");
     setVisible(true);
     requestAnimationFrame(() => {
       requestAnimationFrame(() => setAnimateIn(true));
     });
-  }, [shouldShow]);
+  }, []);
 
   const closePopup = useCallback(() => {
     setAnimateIn(false);
@@ -59,12 +52,17 @@ function WelcomePopup() {
   }, []);
 
   // Set up delay timer + scroll trigger
+  // Runs whenever popup data, auth state, or user changes.
   useEffect(() => {
-    if (!popup || authLoading || user) return;
-    if (!popup.isActive) return;
-    if (localStorage.getItem(STORAGE_KEY)) return;
+    if (authLoading) return;        // wait for auth to settle first
+    if (user) return;               // logged-in: never show
+    if (!popup?.isActive) return;   // disabled by admin
+    if (localStorage.getItem(STORAGE_KEY)) return; // already seen
 
     const delayMs = (popup.delaySeconds ?? 4) * 1000;
+
+    // Reset scroll flag each time this effect runs (e.g. after auth resolves)
+    scrollTriggeredRef.current = false;
 
     // Delay timer
     timerRef.current = setTimeout(() => {
@@ -87,7 +85,8 @@ function WelcomePopup() {
       clearTimeout(timerRef.current);
       window.removeEventListener("scroll", handleScroll);
     };
-  }, [popup, authLoading, user, openPopup]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [popup, authLoading, user]);
 
   const handleCopy = () => {
     if (!popup?.couponCode) return;
