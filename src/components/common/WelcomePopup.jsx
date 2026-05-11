@@ -23,9 +23,14 @@ function WelcomePopup() {
     const fetchPopup = async () => {
       try {
         const { data } = await apiClient.get("/welcome-popup");
+        // eslint-disable-next-line no-console
+        console.debug("[WelcomePopup] API response:", data);
         if (!cancelled) setPopup(data);
-      } catch {
-        // silently ignore — popup is non-critical
+      } catch (err) {
+        // Non-critical — popup silently skipped on API failure.
+        // Check browser console for the URL being called and the error.
+        // eslint-disable-next-line no-console
+        console.warn("[WelcomePopup] Failed to load popup config:", err?.message, err?.config?.baseURL, err?.config?.url);
       }
     };
 
