@@ -3,7 +3,7 @@ function AboutPage() {
     <section className="container-pad py-10">
       <div className="grid gap-8 lg:grid-cols-[1fr_1.1fr] lg:items-center">
         <img
-          src="https://images.unsplash.com/photo-1519947486511-46149fa0a254?auto=format&fit=crop&w=1200&q=80"
+          src="https://res.cloudinary.com/dmb6gepnj/image/upload/v1778948780/woodmart.lk_assest_1_ybpj8o.jpg"
           alt="Woodmart.lk craftsmanship"
           className="h-full min-h-80 w-full rounded-2xl object-cover"
         />

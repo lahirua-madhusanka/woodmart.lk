@@ -86,7 +86,7 @@ function ProductFormPage() {
           cost: variation.cost,
           stock: variation.stock,
           sku: variation.sku || null,
-          imageUrl: variation.imageUrl || uploadedImage || null,
+          imageUrl: uploadedImage || variation.imageUrl || null,
         };
       });
 

@@ -1,8 +1,12 @@
 import asyncHandler from "express-async-handler";
+import crypto from "node:crypto";
 import supabase from "../config/supabase.js";
-
-const STOREFRONT_ASSETS_BUCKET =
-  process.env.STOREFRONT_ASSETS_BUCKET || "storefront-assets";
+import {
+  uploadToImageKit,
+  isImageKitConfigured,
+  isImageKitUrl,
+  migrateRemoteImageToImageKit,
+} from "../services/imageKitService.js";
 
 const allowedSections = [
   "promo_strip",
@@ -21,46 +25,14 @@ const isMissingRelationError = (message = "") => {
   );
 };
 
-const isPermissionError = (message = "") => {
-  const normalized = String(message).toLowerCase();
-  return (
-    normalized.includes("permission") ||
-    normalized.includes("not authorized") ||
-    normalized.includes("unauthorized") ||
-    normalized.includes("forbidden")
-  );
-};
-
-const ensureStorefrontAssetsBucket = async () => {
-  const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-  if (bucketsError) {
-    if (isPermissionError(bucketsError.message)) {
-      throw new Error(
-        "Storage access denied. Set SUPABASE_SERVICE_ROLE_KEY on the server and ensure bucket '" +
-          STOREFRONT_ASSETS_BUCKET +
-          "' exists in Supabase Storage."
-      );
-    }
-    throw new Error(bucketsError.message);
-  }
-
-  const exists = (buckets || []).some((bucket) => bucket.name === STOREFRONT_ASSETS_BUCKET);
-  if (exists) return;
-
-  const { error: createBucketError } = await supabase.storage.createBucket(STOREFRONT_ASSETS_BUCKET, {
-    public: true,
+const normalizeBannerImageUrl = async (imageUrl) => {
+  const value = String(imageUrl || "").trim();
+  if (!value || isImageKitUrl(value)) return value;
+  return migrateRemoteImageToImageKit({
+    imageUrl: value,
+    folder: "banners",
+    fileNamePrefix: "banner-existing",
   });
-
-  if (createBucketError) {
-    if (isPermissionError(createBucketError.message)) {
-      throw new Error(
-        "Cannot create storage bucket. Set SUPABASE_SERVICE_ROLE_KEY on the server or create bucket '" +
-          STOREFRONT_ASSETS_BUCKET +
-          "' manually in Supabase Storage."
-      );
-    }
-    throw new Error(createBucketError.message);
-  }
 };
 
 const mapBanner = (row = {}) => ({
@@ -167,6 +139,7 @@ export const createAdminBanner = asyncHandler(async (req, res) => {
   let payload;
   try {
     payload = parseBannerPayload(req.body);
+    payload.image_url = await normalizeBannerImageUrl(payload.image_url);
   } catch (error) {
     res.status(400);
     throw new Error(error.message);
@@ -183,6 +156,11 @@ export const createAdminBanner = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 
+  console.log("[createAdminBanner] Banner DB save result:", {
+    id: data.id,
+    imageUrl: data.image_url,
+  });
+
   return res.status(201).json(mapBanner(data));
 });
 
@@ -190,6 +168,7 @@ export const updateAdminBanner = asyncHandler(async (req, res) => {
   let payload;
   try {
     payload = parseBannerPayload(req.body);
+    payload.image_url = await normalizeBannerImageUrl(payload.image_url);
   } catch (error) {
     res.status(400);
     throw new Error(error.message);
@@ -212,6 +191,11 @@ export const updateAdminBanner = asyncHandler(async (req, res) => {
     throw new Error("Banner not found");
   }
 
+  console.log("[updateAdminBanner] Banner DB save result:", {
+    id: data.id,
+    imageUrl: data.image_url,
+  });
+
   return res.json(mapBanner(data));
 });
 
@@ -232,38 +216,49 @@ export const uploadAdminBannerImage = asyncHandler(async (req, res) => {
     throw new Error("Banner image file is required");
   }
 
-  await ensureStorefrontAssetsBucket();
+  console.log("[Banner Upload] Starting ImageKit upload...");
+  console.log("File received:", req.file.originalname);
 
-  const extension = req.file.originalname.includes(".")
-    ? req.file.originalname.slice(req.file.originalname.lastIndexOf(".")).toLowerCase()
-    : ".jpg";
-
-  const filePath = `banners/${Date.now()}-${Math.random().toString(36).slice(2)}${extension}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(STOREFRONT_ASSETS_BUCKET)
-    .upload(filePath, req.file.buffer, {
-      contentType: req.file.mimetype,
-      upsert: false,
-    });
-
-  if (uploadError) {
+  // Verify ImageKit is configured
+  if (!isImageKitConfigured()) {
+    console.error("[Banner Upload] ❌ ImageKit not configured!");
     res.status(500);
-    if (isPermissionError(uploadError.message)) {
-      throw new Error(
-        "Banner image upload failed due to storage permissions. Verify SUPABASE_SERVICE_ROLE_KEY and bucket policies."
-      );
-    }
-    throw new Error(uploadError.message);
+    throw new Error(
+      "Image upload service not configured. Please contact support. (Error: ImageKit credentials missing)"
+    );
   }
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STOREFRONT_ASSETS_BUCKET).getPublicUrl(filePath);
+  const extension = req.file.originalname.includes(".")
+    ? req.file.originalname.slice(req.file.originalname.lastIndexOf("."))
+    : ".jpg";
+  const fileName = `banner-${Date.now()}-${crypto.randomUUID()}${extension}`;
+
+  console.log("[Banner Upload] Uploading to ImageKit...", { fileName });
+
+  const result = await uploadToImageKit({
+    buffer: req.file.buffer,
+    fileName,
+    folder: "banners",
+    mimeType: req.file.mimetype,
+  });
+
+  if (!result.success) {
+    console.error("[Banner Upload] ❌ ImageKit upload failed:", result.error);
+    res.status(500);
+    throw new Error(`Banner upload failed: ${result.error}`);
+  }
+
+  if (!isImageKitUrl(result.url)) {
+    console.error("[Banner Upload] Non-ImageKit URL returned from upload:", result.url);
+    res.status(500);
+    throw new Error("ImageKit upload did not return a valid ImageKit URL");
+  }
+
+  console.log("[Banner Upload] ✅ Successfully uploaded to ImageKit", { url: result.url });
 
   return res.json({
     message: "Banner image uploaded successfully",
-    imageUrl: publicUrl,
+    imageUrl: result.url,
   });
 });
 

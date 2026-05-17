@@ -1,8 +1,8 @@
 import crypto from "crypto";
 import asyncHandler from "express-async-handler";
 import supabase from "../config/supabase.js";
+import { uploadMultipleToImageKit, isImageKitConfigured, isImageKitUrl } from "../services/imageKitService.js";
 
-const CUSTOM_PROJECT_IMAGES_BUCKET = process.env.CUSTOM_PROJECT_IMAGES_BUCKET || "custom-project-images";
 const MAX_CUSTOM_PROJECT_IMAGES = 5;
 const PURCHASE_WINDOW_DAYS = 10;
 
@@ -222,56 +222,61 @@ const getProjectById = async (id) => {
   return data || null;
 };
 
-const ensureImagesBucket = async () => {
-  const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-  if (bucketsError) throw new Error(bucketsError.message);
-
-  const exists = (buckets || []).some((bucket) => bucket.name === CUSTOM_PROJECT_IMAGES_BUCKET);
-  if (exists) return;
-
-  const { error: createBucketError } = await supabase.storage.createBucket(CUSTOM_PROJECT_IMAGES_BUCKET, {
-    public: true,
-  });
-  if (createBucketError) throw new Error(createBucketError.message);
-};
-
 const uploadRequestImages = async (files = []) => {
   if (!files.length) return [];
 
-  await ensureImagesBucket();
+  console.log("[Custom Upload] Starting ImageKit upload...", { fileCount: files.length });
+  files.forEach((file) => console.log("File received:", file.originalname));
 
-  const uploadedPaths = [];
-  const imageUrls = [];
-
-  for (let index = 0; index < files.length; index += 1) {
-    const file = files[index];
-    const extension = file.originalname.includes(".")
-      ? file.originalname.slice(file.originalname.lastIndexOf(".")).toLowerCase()
-      : "";
-    const path = `custom-projects/${Date.now()}-${crypto.randomUUID()}${extension}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from(CUSTOM_PROJECT_IMAGES_BUCKET)
-      .upload(path, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
-
-    if (uploadError) {
-      if (uploadedPaths.length) {
-        await supabase.storage.from(CUSTOM_PROJECT_IMAGES_BUCKET).remove(uploadedPaths);
-      }
-      throw new Error(uploadError.message);
-    }
-
-    uploadedPaths.push(path);
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(CUSTOM_PROJECT_IMAGES_BUCKET).getPublicUrl(path);
-
-    imageUrls.push({ imageUrl: publicUrl, sortOrder: index });
+  // Verify ImageKit is configured
+  if (!isImageKitConfigured()) {
+    console.error("[Custom Upload] ❌ ImageKit not configured!");
+    throw new Error(
+      "Image upload service not configured. Please contact support. (Error: ImageKit credentials missing)"
+    );
   }
+
+  const fileNames = files.map((file) => {
+    const timestamp = Date.now();
+    const randomId = crypto.randomUUID();
+    const ext = file.originalname.includes(".")
+      ? file.originalname.slice(file.originalname.lastIndexOf("."))
+      : "";
+    return `custom-project-${timestamp}-${randomId}${ext}`;
+  });
+
+  console.log("[Custom Upload] Uploading to ImageKit...", { fileCount: files.length });
+
+  const results = await uploadMultipleToImageKit({
+    buffers: files.map((f) => f.buffer),
+    fileNames,
+    folder: "custom-requests",
+    mimeTypes: files.map((f) => f.mimetype),
+  });
+
+  // Check for upload failures
+  const failedUploads = results.filter((r) => !r.success);
+  if (failedUploads.length > 0) {
+    console.error("[Custom Upload] ❌ Some uploads failed:", failedUploads);
+    throw new Error(
+      `Image upload failed: ${failedUploads.map((r) => r.error).join(", ")}`
+    );
+  }
+
+  const imageUrls = results.map((r, index) => ({
+    imageUrl: r.url,
+    sortOrder: index,
+  }));
+
+  const nonImageKit = imageUrls.filter((entry) => !isImageKitUrl(entry.imageUrl));
+  if (nonImageKit.length) {
+    console.error("[Custom Upload] Non-ImageKit URLs returned from upload:", nonImageKit);
+    throw new Error("ImageKit upload did not return valid ImageKit URLs");
+  }
+
+  console.log("[Custom Upload] ✅ All images uploaded to ImageKit successfully", {
+    count: imageUrls.length,
+  });
 
   return imageUrls;
 };
@@ -369,9 +374,15 @@ export const createCustomProjectRequest = asyncHandler(async (req, res) => {
     );
 
     if (imageInsertError) {
+      console.error("[createCustomProjectRequest] Image DB save failed:", imageInsertError.message);
       res.status(500);
       throw new Error(imageInsertError.message);
     }
+    console.log("[createCustomProjectRequest] Image DB save result:", {
+      requestId: insertedProject.id,
+      savedCount: imageRows.length,
+      urls: imageRows.map((entry) => entry.imageUrl),
+    });
   }
 
   const projectWithRelations = await getProjectById(insertedProject.id);

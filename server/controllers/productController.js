@@ -3,6 +3,12 @@ import crypto from "node:crypto";
 import supabase from "../config/supabase.js";
 import { mapProduct } from "../utils/dbMappers.js";
 import { getActivePromotionMapForProductIds } from "../services/promotionPricingService.js";
+import {
+  uploadMultipleToImageKit,
+  isImageKitConfigured,
+  isImageKitUrl,
+  migrateRemoteImageToImageKit,
+} from "../services/imageKitService.js";
 
 const attachPromotionToProduct = (product, entry) => {
   if (!product) return product;
@@ -36,9 +42,46 @@ const enrichProductsWithPromotions = async (products) => {
 };
 
 const MAX_PRODUCT_IMAGES = 6;
-const PRODUCT_IMAGES_BUCKET = process.env.PRODUCT_IMAGES_BUCKET || "product-images";
 const isMissingColumnError = (message = "") =>
   message.includes("Could not find") && message.includes("column");
+
+const ensureImageKitUrl = async ({ imageUrl, folder, fileNamePrefix }) => {
+  const value = String(imageUrl || "").trim();
+  if (!value) return "";
+  if (isImageKitUrl(value)) return value;
+  return migrateRemoteImageToImageKit({ imageUrl: value, folder, fileNamePrefix });
+};
+
+const normalizeProductImageUrls = async (images = []) => {
+  const urls = [];
+  for (const [index, imageUrl] of images.entries()) {
+    urls.push(
+      await ensureImageKitUrl({
+        imageUrl,
+        folder: "products",
+        fileNamePrefix: `product-existing-${index}`,
+      })
+    );
+  }
+  return urls;
+};
+
+const normalizeVariationImageUrls = async (variations = []) => {
+  const normalized = [];
+  for (const [index, variation] of variations.entries()) {
+    normalized.push({
+      ...variation,
+      imageUrl: variation.imageUrl
+        ? await ensureImageKitUrl({
+            imageUrl: variation.imageUrl,
+            folder: "variations",
+            fileNamePrefix: `variation-existing-${index}`,
+          })
+        : "",
+    });
+  }
+  return normalized;
+};
 
 const calculateRating = (reviews = []) => {
   if (!reviews.length) return 0;
@@ -552,7 +595,7 @@ export const createProduct = asyncHandler(async (req, res) => {
     throw new Error("At least one variation is required");
   }
 
-  const normalizedVariations = variations.map((variation, index) => ({
+  let normalizedVariations = variations.map((variation, index) => ({
     name: String(variation?.name || "").trim(),
     price: Number(variation?.price),
     discountedPrice:
@@ -605,6 +648,14 @@ export const createProduct = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error("Variation SKU values must be unique");
   }
+
+  const imageUrls = await normalizeProductImageUrls(images);
+  normalizedVariations = await normalizeVariationImageUrls(normalizedVariations);
+
+  console.log("[createProduct] Image URLs normalized for DB save:", {
+    images: imageUrls,
+    variationImageCount: normalizedVariations.filter((variation) => variation.imageUrl).length,
+  });
 
   const legacyMirror = summarizeVariationsForLegacyProduct(normalizedVariations);
   const insertPayload = {
@@ -667,8 +718,8 @@ export const createProduct = asyncHandler(async (req, res) => {
     throw new Error(createError?.message || "Failed to create product");
   }
 
-  if (images.length) {
-    const rows = images.map((imageUrl, index) => ({
+  if (imageUrls.length) {
+    const rows = imageUrls.map((imageUrl, index) => ({
       product_id: created.id,
       image_url: imageUrl,
       sort_order: index,
@@ -676,9 +727,15 @@ export const createProduct = asyncHandler(async (req, res) => {
 
     const { error: imagesError } = await supabase.from("product_images").insert(rows);
     if (imagesError) {
+      console.error("[createProduct] Product image DB save failed:", imagesError.message);
       res.status(500);
       throw new Error(imagesError.message);
     }
+    console.log("[createProduct] Product image DB save result:", {
+      productId: created.id,
+      savedCount: rows.length,
+      urls: rows.map((row) => row.image_url),
+    });
   }
 
   try {
@@ -791,6 +848,12 @@ export const updateProduct = asyncHandler(async (req, res) => {
       res.status(400);
       throw new Error("Variation SKU values must be unique");
     }
+
+    normalizedVariations = await normalizeVariationImageUrls(normalizedVariations);
+    console.log("[updateProduct] Variation image URLs normalized for DB save:", {
+      productId: req.params.id,
+      variationImageCount: normalizedVariations.filter((variation) => variation.imageUrl).length,
+    });
   }
 
   // Mirror legacy NOT NULL product columns from incoming variations (when provided).
@@ -854,17 +917,29 @@ export const updateProduct = asyncHandler(async (req, res) => {
       throw new Error(deleteImagesError.message);
     }
 
-    if (req.body.images.length) {
-      const rows = req.body.images.map((imageUrl, index) => ({
+    const imageUrls = await normalizeProductImageUrls(req.body.images);
+    console.log("[updateProduct] Product image URLs normalized for DB save:", {
+      productId: req.params.id,
+      images: imageUrls,
+    });
+
+    if (imageUrls.length) {
+      const rows = imageUrls.map((imageUrl, index) => ({
         product_id: req.params.id,
         image_url: imageUrl,
         sort_order: index,
       }));
       const { error: insertImagesError } = await supabase.from("product_images").insert(rows);
       if (insertImagesError) {
+        console.error("[updateProduct] Product image DB save failed:", insertImagesError.message);
         res.status(500);
         throw new Error(insertImagesError.message);
       }
+      console.log("[updateProduct] Product image DB save result:", {
+        productId: req.params.id,
+        savedCount: rows.length,
+        urls: rows.map((row) => row.image_url),
+      });
     }
   }
 
@@ -1061,6 +1136,11 @@ export const updateOwnReview = asyncHandler(async (req, res) => {
 export const uploadProductImages = asyncHandler(async (req, res) => {
   const files = req.files || [];
 
+  console.log("[Product Upload] Starting ImageKit upload...", {
+    filesCount: files.length,
+  });
+  files.forEach((file) => console.log("File received:", file.originalname));
+
   if (!files.length) {
     res.status(400);
     throw new Error("Please select at least one image");
@@ -1071,51 +1151,54 @@ export const uploadProductImages = asyncHandler(async (req, res) => {
     throw new Error(`You can upload up to ${MAX_PRODUCT_IMAGES} images only`);
   }
 
-  const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-  if (!bucketsError) {
-    const exists = (buckets || []).some((bucket) => bucket.name === PRODUCT_IMAGES_BUCKET);
-    if (!exists) {
-      const { error: createBucketError } = await supabase.storage.createBucket(PRODUCT_IMAGES_BUCKET, {
-        public: true,
-      });
-      if (createBucketError) {
-        res.status(500);
-        throw new Error(createBucketError.message);
-      }
-    }
+  // Verify ImageKit is configured
+  if (!isImageKitConfigured()) {
+    console.error("[Product Upload] ❌ ImageKit not configured!");
+    res.status(500);
+    throw new Error(
+      "Image upload service not configured. Please contact support. (Error: ImageKit credentials missing)"
+    );
   }
 
-  const uploadedPaths = [];
-  const imageUrls = [];
-
-  for (const file of files) {
-    const extension = file.originalname.includes(".")
-      ? file.originalname.slice(file.originalname.lastIndexOf(".")).toLowerCase()
+  // Upload all files to ImageKit
+  const fileNames = files.map((file) => {
+    const timestamp = Date.now();
+    const randomId = crypto.randomUUID();
+    const ext = file.originalname.includes(".")
+      ? file.originalname.slice(file.originalname.lastIndexOf("."))
       : "";
-    const path = `products/${Date.now()}-${crypto.randomUUID()}${extension}`;
+    return `product-${timestamp}-${randomId}${ext}`;
+  });
 
-    const { error: uploadError } = await supabase.storage
-      .from(PRODUCT_IMAGES_BUCKET)
-      .upload(path, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
+  console.log("[Product Upload] Uploading to ImageKit...", { fileCount: files.length });
 
-    if (uploadError) {
-      if (uploadedPaths.length) {
-        await supabase.storage.from(PRODUCT_IMAGES_BUCKET).remove(uploadedPaths);
-      }
-      res.status(500);
-      throw new Error(uploadError.message);
-    }
+  const results = await uploadMultipleToImageKit({
+    buffers: files.map((f) => f.buffer),
+    fileNames,
+    folder: "products",
+    mimeTypes: files.map((f) => f.mimetype),
+  });
 
-    uploadedPaths.push(path);
-
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from(PRODUCT_IMAGES_BUCKET).getPublicUrl(path);
-    imageUrls.push(publicUrl);
+  // Check for upload failures
+  const failedUploads = results.filter((r) => !r.success);
+  if (failedUploads.length > 0) {
+    console.error("[Product Upload] ❌ Some uploads failed:", failedUploads);
+    res.status(500);
+    throw new Error(
+      `Image upload failed: ${failedUploads.map((r) => r.error).join(", ")}`
+    );
   }
+
+  const imageUrls = results.map((r) => r.url);
+  if (imageUrls.some((url) => !isImageKitUrl(url))) {
+    console.error("[Product Upload] Non-ImageKit URL returned from upload:", imageUrls);
+    res.status(500);
+    throw new Error("ImageKit upload did not return valid ImageKit URLs");
+  }
+
+  console.log("[Product Upload] ✅ All images uploaded to ImageKit successfully", {
+    urls: imageUrls,
+  });
 
   res.status(201).json({ images: imageUrls });
 });

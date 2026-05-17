@@ -59,6 +59,10 @@ const env = {
   emailVerificationTtlHours: Number(process.env.EMAIL_VERIFICATION_TTL_HOURS || 1),
   brevoNewsletterListId: Number(process.env.BREVO_NEWSLETTER_LIST_ID || 0),
   googleClientId: clean(process.env.GOOGLE_CLIENT_ID),
+  // ImageKit.io configuration
+  imageKitPublicKey: clean(process.env.IMAGEKIT_PUBLIC_KEY),
+  imageKitPrivateKey: clean(process.env.IMAGEKIT_PRIVATE_KEY),
+  imageKitUrlEndpoint: clean(process.env.IMAGEKIT_URL_ENDPOINT),
 };
 
 export default env;

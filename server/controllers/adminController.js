@@ -6,9 +6,13 @@ import { addOrderStatusHistory, autoDeliverIfDue, buildOrderLifecycleTimestamps 
 import { sendOrderShippedEmail } from "../services/orderShippedEmailService.js";
 import { restoreVariationStockForOrder } from "./orderController.js";
 import { mapOrder, mapProduct, mapUser } from "../utils/dbMappers.js";
-
-const STOREFRONT_ASSETS_BUCKET =
-  process.env.STOREFRONT_ASSETS_BUCKET || "storefront-assets";
+import {
+  uploadToImageKit,
+  isImageKitConfigured,
+  isImageKitUrl,
+  isSupabaseStorageUrl,
+  migrateRemoteImageToImageKit,
+} from "../services/imageKitService.js";
 
 const orderSelect =
   "id, user_id, subtotal_amount, shipping_total, discount_total, product_cost_total, profit_total, total_amount, payment_status, order_status, payment_method, payment_intent_id, transaction_id, paid_amount, tracking_number, courier_name, admin_note, tracking_added_at, shipped_at, out_for_delivery_at, delivered_at, returned_at, cancelled_at, cancellation_reason, cancelled_by, invoice_number, coupon_id, coupon_code, coupon_title, coupon_discount_type, coupon_discount_value, coupon_discount_amount, created_at, updated_at, users:user_id(id, name, email), order_items(product_id, name, image, sku, variation_id, variation_name, variation_sku, variation_image, variation_price, price, list_price, discount_amount, product_cost, shipping_price, quantity, line_subtotal, line_shipping_total, line_discount_total, line_product_cost_total, line_total, line_profit_total, promotion_id, promotion_title, promotion_slug, promotion_discount_percentage, promotion_original_price, promotion_discounted_price, promotion_active), order_shipping_addresses(full_name, line1, line2, city, state, postal_code, country, phone), order_status_history(id, order_status, note, changed_by, changed_at, users:changed_by(name, email))";
@@ -155,6 +159,48 @@ const normalizeHeroSlides = (value, fallbackSlides = getDefaultHeroSlides()) => 
   return normalized;
 };
 
+const normalizeStoreSettingsImageUrls = async (payload) => {
+  const next = { ...payload };
+  const normalizeUrl = async ({ imageUrl, folder, fileNamePrefix }) => {
+    const value = String(imageUrl || "").trim();
+    if (!value || isImageKitUrl(value) || !isSupabaseStorageUrl(value)) return value;
+    return migrateRemoteImageToImageKit({ imageUrl: value, folder, fileNamePrefix });
+  };
+
+  if (Array.isArray(next.hero_slides)) {
+    const slides = [];
+    for (const [index, slide] of next.hero_slides.entries()) {
+      slides.push({
+        ...slide,
+        imageUrl: await normalizeUrl({
+          imageUrl: slide.imageUrl,
+          folder: "banners",
+          fileNamePrefix: `hero-slide-existing-${index}`,
+        }),
+      });
+    }
+    next.hero_slides = slides;
+    const primarySlide = slides.find((slide) => slide.status === "active") || slides[0];
+    if (primarySlide?.imageUrl) {
+      next.hero_image_url = primarySlide.imageUrl;
+    }
+  }
+
+  next.hero_image_url = await normalizeUrl({
+    imageUrl: next.hero_image_url,
+    folder: "banners",
+    fileNamePrefix: "hero-existing",
+  });
+
+  next.contact_image_url = await normalizeUrl({
+    imageUrl: next.contact_image_url,
+    folder: "settings",
+    fileNamePrefix: "contact-existing",
+  });
+
+  return next;
+};
+
 const isMissingRelationError = (message = "") => {
   const normalized = String(message).toLowerCase();
   return normalized.includes("could not find") && (normalized.includes("relation") || normalized.includes("table"));
@@ -167,16 +213,6 @@ const isMissingColumnError = (message = "") => {
     (normalized.includes("could not find") &&
       normalized.includes("column") &&
       normalized.includes("schema cache"))
-  );
-};
-
-const isPermissionError = (message = "") => {
-  const normalized = String(message).toLowerCase();
-  return (
-    normalized.includes("permission") ||
-    normalized.includes("not authorized") ||
-    normalized.includes("unauthorized") ||
-    normalized.includes("forbidden")
   );
 };
 
@@ -301,38 +337,6 @@ const applyNoStoreHeaders = (res) => {
   res.set("Expires", "0");
 };
 
-const ensureStorefrontAssetsBucket = async () => {
-  const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets();
-  if (bucketsError) {
-    if (isPermissionError(bucketsError.message)) {
-      throw new Error(
-        "Storage access denied. Set SUPABASE_SERVICE_ROLE_KEY on the server and ensure bucket '" +
-          STOREFRONT_ASSETS_BUCKET +
-          "' exists in Supabase Storage."
-      );
-    }
-    throw new Error(bucketsError.message);
-  }
-
-  const exists = (buckets || []).some((bucket) => bucket.name === STOREFRONT_ASSETS_BUCKET);
-  if (exists) return;
-
-  const { error: createBucketError } = await supabase.storage.createBucket(STOREFRONT_ASSETS_BUCKET, {
-    public: true,
-  });
-
-  if (createBucketError) {
-    if (isPermissionError(createBucketError.message)) {
-      throw new Error(
-        "Cannot create storage bucket. Set SUPABASE_SERVICE_ROLE_KEY on the server or create bucket '" +
-          STOREFRONT_ASSETS_BUCKET +
-          "' manually in Supabase Storage."
-      );
-    }
-    throw new Error(createBucketError.message);
-  }
-};
-
 const buildStoreSettingsPayload = (body = {}) => {
   const fallbackSlides = normalizeHeroSlides(
     [
@@ -449,7 +453,7 @@ export const getAdminSettings = asyncHandler(async (req, res) => {
 export const updateAdminSettings = asyncHandler(async (req, res) => {
   applyNoStoreHeaders(res);
 
-  const payload = buildStoreSettingsPayload(req.body);
+  const payload = await normalizeStoreSettingsImageUrls(buildStoreSettingsPayload(req.body));
 
   const { data, error } = await upsertStoreSettings(payload);
 
@@ -467,6 +471,11 @@ export const updateAdminSettings = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 
+  console.log("[updateAdminSettings] Settings DB save result:", {
+    heroImage: data.hero_image_url,
+    contactImageUrl: data.contact_image_url,
+  });
+
   return res.json(mapStoreSettings(data));
 });
 
@@ -478,33 +487,46 @@ export const uploadAdminHeroImage = asyncHandler(async (req, res) => {
     throw new Error("Hero image file is required");
   }
 
-  await ensureStorefrontAssetsBucket();
+  console.log("[Hero Upload] Starting ImageKit upload...");
+  console.log("File received:", req.file.originalname);
 
-  const extension = req.file.originalname.includes(".")
-    ? req.file.originalname.slice(req.file.originalname.lastIndexOf(".")).toLowerCase()
-    : ".jpg";
-  const filePath = `hero/${Date.now()}-${crypto.randomUUID()}${extension}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from(STOREFRONT_ASSETS_BUCKET)
-    .upload(filePath, req.file.buffer, {
-      contentType: req.file.mimetype,
-      upsert: false,
-    });
-
-  if (uploadError) {
+  // Verify ImageKit is configured
+  if (!isImageKitConfigured()) {
+    console.error("[Hero Upload] ❌ ImageKit not configured!");
     res.status(500);
-    if (isPermissionError(uploadError.message)) {
-      throw new Error(
-        "Hero image upload failed due to storage permissions. Verify SUPABASE_SERVICE_ROLE_KEY and bucket policies."
-      );
-    }
-    throw new Error(uploadError.message);
+    throw new Error(
+      "Image upload service not configured. Please contact support. (Error: ImageKit credentials missing)"
+    );
   }
 
-  const {
-    data: { publicUrl },
-  } = supabase.storage.from(STOREFRONT_ASSETS_BUCKET).getPublicUrl(filePath);
+  const extension = req.file.originalname.includes(".")
+    ? req.file.originalname.slice(req.file.originalname.lastIndexOf("."))
+    : ".jpg";
+  const fileName = `hero-${Date.now()}-${crypto.randomUUID()}${extension}`;
+
+  console.log("[Hero Upload] Uploading to ImageKit...", { fileName });
+
+  const result = await uploadToImageKit({
+    buffer: req.file.buffer,
+    fileName,
+    folder: "banners",
+    mimeType: req.file.mimetype,
+  });
+
+  if (!result.success) {
+    console.error("[Hero Upload] ❌ ImageKit upload failed:", result.error);
+    res.status(500);
+    throw new Error(`Hero upload failed: ${result.error}`);
+  }
+
+  if (!isImageKitUrl(result.url)) {
+    console.error("[Hero Upload] Non-ImageKit URL returned from upload:", result.url);
+    res.status(500);
+    throw new Error("ImageKit upload did not return a valid ImageKit URL");
+  }
+
+  const imageUrl = result.url;
+  console.log("[Hero Upload] ✅ Successfully uploaded to ImageKit", { url: imageUrl });
 
   const requestedIndex = Number(req.body?.slideIndex);
   const slideIndex = Number.isInteger(requestedIndex)
@@ -537,7 +559,7 @@ export const uploadAdminHeroImage = asyncHandler(async (req, res) => {
 
   nextSlides[slideIndex] = {
     ...(nextSlides[slideIndex] || getDefaultHeroSlides()[0]),
-    imageUrl: publicUrl,
+    imageUrl,
     displayOrder: slideIndex + 1,
   };
 
@@ -553,9 +575,14 @@ export const uploadAdminHeroImage = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 
+  console.log("[uploadAdminHeroImage] Settings DB save result:", {
+    heroImage: imageUrl,
+    slideIndex,
+  });
+
   return res.json({
     message: `Hero image uploaded successfully for slide ${slideIndex + 1}`,
-    heroImage: publicUrl,
+    heroImage: imageUrl,
     settings: mapStoreSettings(data),
   });
 });
