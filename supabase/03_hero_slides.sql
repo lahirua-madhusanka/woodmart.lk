@@ -8,7 +8,7 @@ update public.store_settings
 set hero_slides = jsonb_build_array(
   jsonb_build_object(
     'id', 'hero-slide-1',
-    'imageUrl', coalesce(hero_image_url, 'https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80'),
+    'imageUrl', coalesce(hero_image_url, ''),
     'title', coalesce(hero_title, 'Craft your space with timeless pieces.'),
     'subtitle', coalesce(hero_subtitle, 'Discover premium furniture, decor, and lifestyle objects inspired by natural materials and modern living.'),
     'buttonText', coalesce(hero_primary_button_text, 'Shop Now'),

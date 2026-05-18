@@ -105,8 +105,7 @@ const defaultStoreSettings = {
   heroPrimaryButtonLink: "/shop",
   heroSecondaryButtonText: "View Collection",
   heroSecondaryButtonLink: "/shop",
-  heroImage:
-    "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80",
+  heroImage: "",
 };
 
 const MAX_HERO_SLIDES = 3;

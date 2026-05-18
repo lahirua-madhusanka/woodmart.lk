@@ -19,13 +19,11 @@ const defaultStorefrontSettings = {
   heroPrimaryButtonLink: "/shop",
   heroSecondaryButtonText: "View Collection",
   heroSecondaryButtonLink: "/shop",
-  heroImage:
-    "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80",
+  heroImage: "",
   heroSlides: [
     {
       id: "hero-slide-1",
-      imageUrl:
-        "https://images.unsplash.com/photo-1493666438817-866a91353ca9?auto=format&fit=crop&w=1200&q=80",
+      imageUrl: "",
       title: "Craft your space with timeless pieces.",
       subtitle:
         "Discover premium furniture, decor, and lifestyle objects inspired by natural materials and modern living.",
