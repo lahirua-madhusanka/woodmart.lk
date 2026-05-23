@@ -3,9 +3,13 @@ import express from "express";
 import multer from "multer";
 import {
   addReview,
+  allowProductCostInResponse,
   createProduct,
   deleteProduct,
+  getHomepageProducts,
+  getProductCards,
   getProductById,
+  getProductCategories,
   getReviewEligibility,
   getProducts,
   updateOwnReview,
@@ -32,7 +36,12 @@ const upload = multer({
   },
 });
 
+router.get("/admin", protect, adminOnly, allowProductCostInResponse, getProducts);
+router.get("/admin/:id", protect, adminOnly, allowProductCostInResponse, getProductById);
 router.get("/", getProducts);
+router.get("/homepage", getHomepageProducts);
+router.get("/categories", getProductCategories);
+router.get("/cards", getProductCards);
 router.post("/upload-images", protect, adminOnly, upload.array("images", MAX_PRODUCT_IMAGES), uploadProductImages);
 router.get("/:id", getProductById);
 

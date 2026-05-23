@@ -1292,19 +1292,15 @@ export const getAdminProfitReport = asyncHandler(async (req, res) => {
   const normalizeItemMetrics = (item = {}) => {
     const quantity = Number(item.quantity || 0);
     const unitPrice = orderNumber(item.price);
-    const originalPrice = orderNumber(item.listPrice ?? item.price);
     const discountAmount = orderNumber(item.discountAmount);
     const shippingPrice = orderNumber(item.shippingPrice);
     const productCost = orderNumber(item.productCost);
 
-    // Use original (pre-discount) price for profit calculation
-    const lineOriginalTotal = originalPrice * quantity;
     const lineShippingTotal = orderNumber(item.lineShippingTotal) || shippingPrice * quantity;
     const lineDiscountTotal = orderNumber(item.lineDiscountTotal) || discountAmount * quantity;
     const lineProductCostTotal = orderNumber(item.lineProductCostTotal) || productCost * quantity;
     const lineTotal = orderNumber(item.lineTotal) || (unitPrice * quantity) + lineShippingTotal;
-    const lineProfitTotal =
-      lineOriginalTotal - (lineProductCostTotal + lineShippingTotal + lineDiscountTotal);
+    const lineProfitTotal = lineTotal - lineShippingTotal - lineProductCostTotal;
 
     return {
       quantity,
@@ -1331,10 +1327,8 @@ export const getAdminProfitReport = asyncHandler(async (req, res) => {
     const shipping = orderNumber(order.shippingTotal) || itemsShipping;
     const discount = orderNumber(order.discountTotal) || itemsDiscount;
     const productCost = orderNumber(order.productCostTotal) || itemsProductCost;
-    const total = orderNumber(order.totalAmount) || subtotal + shipping;
-
-    // Updated profit calculation: profit = subtotal - (productCost + shipping)
-    const profit = subtotal - (productCost + shipping);
+    const total = orderNumber(order.totalAmount) || subtotal + shipping - discount;
+    const profit = total - shipping - productCost;
 
     return {
       items,

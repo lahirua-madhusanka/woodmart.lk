@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight, Heart, Minus, Plus, ShieldCheck, ShoppingBag, Truck } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router-dom";
 import { toast } from "react-toastify";
 import DOMPurify from "dompurify";
@@ -63,6 +63,7 @@ function ProductDetailsPage() {
   const [review, setReview] = useState({ rating: 5, comment: "" });
   const [submittingReview, setSubmittingReview] = useState(false);
   const [localReviews, setLocalReviews] = useState([]);
+  const reviewsSectionRef = useRef(null);
   const [reviewEligibility, setReviewEligibility] = useState({
     eligible: false,
     canReview: false,
@@ -327,6 +328,16 @@ function ProductDetailsPage() {
     navigate("/checkout");
   };
 
+  const scrollToReviews = () => {
+    setActiveTab("reviews");
+    window.setTimeout(() => {
+      reviewsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 0);
+  };
+
   const selectedImage = gallery[activeImageIndex] || product?.image || "";
 
   const showPrevImage = () => {
@@ -506,14 +517,19 @@ function ProductDetailsPage() {
             {product.category}
           </p>
           <h1 className="mt-2 font-display text-4xl font-bold">{product.name}</h1>
-          <div className="mt-3">
+          <button
+            type="button"
+            onClick={scrollToReviews}
+            className="mt-3 inline-flex cursor-pointer appearance-none border-0 bg-transparent p-0 text-left"
+            aria-label="Show product reviews"
+          >
             <StarRatingDisplay
               rating={ratingSummary}
               reviewCount={localReviews.length || 0}
               showValue
               size={16}
             />
-          </div>
+          </button>
 
           <div className="mt-4 flex items-center gap-3">
             <span className="text-3xl font-bold text-brand-dark">{formatMoney(unitPrice)}</span>
@@ -632,7 +648,7 @@ function ProductDetailsPage() {
         </div>
       </div>
 
-      <div className="mt-12 rounded-xl border border-slate-200 bg-white p-6">
+      <div ref={reviewsSectionRef} id="product-reviews" className="mt-12 rounded-xl border border-slate-200 bg-white p-6 scroll-mt-24">
         <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-200 pb-3">
           <button
             onClick={() => setActiveTab("description")}

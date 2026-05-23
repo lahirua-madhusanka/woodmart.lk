@@ -1,7 +1,7 @@
 import apiClient from "../apiClient";
 
 export const getAdminProductsApi = async (params = {}) => {
-  const { data } = await apiClient.get("/products", { params });
+  const { data } = await apiClient.get("/products/admin", { params });
   return data;
 };
 

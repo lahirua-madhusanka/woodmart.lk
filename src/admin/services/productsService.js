@@ -1,10 +1,10 @@
 import { del, get, post, put } from "./adminApi";
 
 export const getProducts = async (params = {}) =>
-  (await get("/products", { params })).data;
+  (await get("/products/admin", { params })).data;
 
 export const getProductById = async (id) =>
-  (await get(`/products/${id}`)).data;
+  (await get(`/products/admin/${id}`)).data;
 
 export const createProduct = async (payload) =>
   (await post("/products", payload)).data;

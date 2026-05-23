@@ -2,9 +2,7 @@ import { Search, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import ProductCard from "../components/products/ProductCard";
-import { useStore } from "../context/StoreContext";
-import { getProductsApi } from "../services/productService";
-import { getProductMinPrice } from "../utils/pricing";
+import { getProductCardsApi, getProductCategoriesApi } from "../services/productService";
 
 
 const TOP_SECTION_PRODUCT_COUNT = 4;
@@ -12,7 +10,6 @@ const INITIAL_VISIBLE_PRODUCTS = 24;
 const LOAD_MORE_STEP = 12;
 
 function ShopPage() {
-  const { products } = useStore();
   const [params, setParams] = useSearchParams();
   const urlCategory = (params.get("category") || "").trim();
   const urlQuery = (params.get("q") || "").trim();
@@ -21,37 +18,62 @@ function ShopPage() {
   const [category, setCategory] = useState(urlCategory || "All");
   const [minRating, setMinRating] = useState(0);
   const [maxPrice, setMaxPrice] = useState(200000);
-  const [sortBy, setSortBy] = useState("featured");
-  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_PRODUCTS);
+  const [sortBy, setSortBy] = useState("new");
   const [catalog, setCatalog] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ total: 0, hasMore: false });
   const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   useEffect(() => {
     setSearch(urlQuery);
     setCategory(urlCategory || "All");
-    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
+    setPage(1);
   }, [urlCategory, urlQuery]);
 
   useEffect(() => {
     let ignore = false;
 
     const loadProducts = async () => {
-      setLoadingCatalog(true);
+      const isFirstPage = page === 1;
+      const requestLimit = isFirstPage ? INITIAL_VISIBLE_PRODUCTS : LOAD_MORE_STEP;
+      const requestOffset = isFirstPage ? 0 : INITIAL_VISIBLE_PRODUCTS + (page - 2) * LOAD_MORE_STEP;
+
+      if (isFirstPage) {
+        setLoadingCatalog(true);
+      } else {
+        setLoadingMore(true);
+      }
+
       try {
-        const data = await getProductsApi({
-          category: urlCategory || undefined,
+        const data = await getProductCardsApi({
+          category: category === "All" ? undefined : category,
+          q: search.trim() || undefined,
+          minRating: minRating || undefined,
+          maxPrice,
+          sort: sortBy,
+          page,
+          offset: requestOffset,
+          limit: requestLimit,
         });
 
         if (!ignore) {
-          setCatalog(Array.isArray(data) ? data : []);
+          const items = Array.isArray(data?.items) ? data.items : [];
+          setCatalog((current) => (isFirstPage ? items : [...current, ...items]));
+          setPagination(data?.pagination || { total: items.length, hasMore: false });
         }
       } catch {
         if (!ignore) {
-          setCatalog([]);
+          if (isFirstPage) {
+            setCatalog([]);
+          }
+          setPagination({ total: 0, hasMore: false });
         }
       } finally {
         if (!ignore) {
           setLoadingCatalog(false);
+          setLoadingMore(false);
         }
       }
     };
@@ -61,7 +83,30 @@ function ShopPage() {
     return () => {
       ignore = true;
     };
-  }, [urlCategory, urlQuery]);
+  }, [category, maxPrice, minRating, page, search, sortBy]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadCategories = async () => {
+      try {
+        const data = await getProductCategoriesApi();
+        if (!ignore) {
+          setCategories(Array.isArray(data) ? data : []);
+        }
+      } catch {
+        if (!ignore) {
+          setCategories([]);
+        }
+      }
+    };
+
+    loadCategories();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   const updateQueryParam = (key, value) => {
     const nextParams = new URLSearchParams(params);
@@ -74,58 +119,32 @@ function ShopPage() {
   };
 
   const uniqueCategories = useMemo(
-    () => ["All", ...new Set((products || []).map((item) => item.category).filter(Boolean))],
-    [products]
+    () => {
+      const names = categories
+        .map((item) => (item?.name ? item.name : item))
+        .filter(Boolean);
+
+      return ["All", ...new Set(names)];
+    },
+    [categories]
   );
 
-  const filtered = useMemo(() => {
-    const lowered = search.trim().toLowerCase();
+  const topSectionProducts = catalog.slice(0, TOP_SECTION_PRODUCT_COUNT);
+  const remainingProducts = catalog.slice(TOP_SECTION_PRODUCT_COUNT);
 
-    const data = catalog
-      .filter((item) => (category === "All" ? true : item.category === category))
-      .filter((item) => Number(getProductMinPrice(item)) <= maxPrice)
-      .filter((item) => item.rating >= minRating)
-      .filter((item) =>
-        lowered
-          ? [item.name, item.category, item.description, Array.isArray(item.tags) ? item.tags.join(" ") : ""]
-              .join(" ")
-              .toLowerCase()
-              .includes(lowered)
-          : true
-      );
-
-    if (sortBy === "priceAsc") {
-      return [...data].sort(
-        (a, b) => Number(getProductMinPrice(a)) - Number(getProductMinPrice(b))
-      );
-    }
-    if (sortBy === "priceDesc") {
-      return [...data].sort(
-        (a, b) => Number(getProductMinPrice(b)) - Number(getProductMinPrice(a))
-      );
-    }
-    if (sortBy === "rating") return [...data].sort((a, b) => b.rating - a.rating);
-    if (sortBy === "new") {
-      return [...data].sort(
-        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-      );
-    }
-    return data;
-  }, [catalog, category, maxPrice, minRating, search, sortBy]);
-
-  const visibleProducts = filtered.slice(0, visibleCount);
-  const topSectionProducts = visibleProducts.slice(0, TOP_SECTION_PRODUCT_COUNT);
-  const remainingProducts = visibleProducts.slice(TOP_SECTION_PRODUCT_COUNT);
+  const resetProductPage = () => {
+    setPage(1);
+  };
 
   const onCategoryChange = (nextCategory) => {
     setCategory(nextCategory);
-    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
+    resetProductPage();
     updateQueryParam("category", nextCategory);
   };
 
   const onSearchChange = (value) => {
     setSearch(value);
-    setVisibleCount(INITIAL_VISIBLE_PRODUCTS);
+    resetProductPage();
   };
 
   return (
@@ -135,7 +154,7 @@ function ShopPage() {
           <p className="text-xs font-semibold uppercase tracking-wider text-brand">Shop</p>
           <h1 className="font-display text-3xl font-bold">All Products</h1>
         </div>
-        <div className="text-sm text-muted">{filtered.length} products found</div>
+        <div className="text-sm text-muted">{pagination.total || catalog.length} products found</div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[280px_1fr]">
@@ -188,7 +207,10 @@ function ShopPage() {
               max={200000}
               step={500}
               value={maxPrice}
-              onChange={(event) => setMaxPrice(Number(event.target.value))}
+              onChange={(event) => {
+                setMaxPrice(Number(event.target.value));
+                resetProductPage();
+              }}
               className="w-full accent-brand"
             />
           </div>
@@ -197,7 +219,10 @@ function ShopPage() {
             <h3 className="mb-2 text-sm font-semibold">Minimum Rating</h3>
             <select
               value={minRating}
-              onChange={(event) => setMinRating(Number(event.target.value))}
+              onChange={(event) => {
+                setMinRating(Number(event.target.value));
+                resetProductPage();
+              }}
               className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none"
             >
               <option value={0}>All</option>
@@ -212,11 +237,14 @@ function ShopPage() {
           <div className="mb-4 flex justify-end">
             <select
               value={sortBy}
-              onChange={(event) => setSortBy(event.target.value)}
+              onChange={(event) => {
+                setSortBy(event.target.value);
+                resetProductPage();
+              }}
               className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm outline-none"
             >
-              <option value="featured">Sort: Featured</option>
               <option value="new">Newest</option>
+              <option value="featured">Sort: Featured</option>
               <option value="priceAsc">Price: Low to High</option>
               <option value="priceDesc">Price: High to Low</option>
               <option value="rating">Top Rated</option>
@@ -227,7 +255,7 @@ function ShopPage() {
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-muted">
               Loading catalog...
             </div>
-          ) : filtered.length === 0 ? (
+          ) : catalog.length === 0 ? (
             <div className="rounded-xl border border-dashed border-slate-300 bg-white p-10 text-center text-muted">
               No products found.
             </div>
@@ -240,7 +268,7 @@ function ShopPage() {
           )}
         </div>
 
-        {!loadingCatalog && filtered.length > 0 && remainingProducts.length > 0 ? (
+        {!loadingCatalog && catalog.length > 0 && remainingProducts.length > 0 ? (
           <div className="lg:col-span-2">
             <div className="grid grid-cols-2 gap-3 sm:gap-6 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
               {remainingProducts.map((product) => (
@@ -250,13 +278,14 @@ function ShopPage() {
           </div>
         ) : null}
 
-        {visibleCount < filtered.length && (
+        {pagination.hasMore && (
           <div className="mt-2 text-center lg:col-span-2">
             <button
-              onClick={() => setVisibleCount((count) => count + LOAD_MORE_STEP)}
+              onClick={() => setPage((current) => current + 1)}
+              disabled={loadingMore}
               className="btn-secondary"
             >
-              Load More
+              {loadingMore ? "Loading..." : "Load More"}
             </button>
           </div>
         )}

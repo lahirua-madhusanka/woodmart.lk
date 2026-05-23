@@ -223,7 +223,7 @@ export const createOrder = asyncHandler(async (req, res) => {
     const lineDiscountTotal = unitDiscountAmount * quantity;
     const lineProductCostTotal = unitProductCost * quantity;
     const lineTotal = lineSubtotal + lineShippingTotal;
-    const lineProfitTotal = lineSubtotal - (lineProductCostTotal + lineShippingTotal + lineDiscountTotal);
+    const lineProfitTotal = lineTotal - lineShippingTotal - lineProductCostTotal;
 
     return {
       product_id: item.products.id,
@@ -292,7 +292,7 @@ export const createOrder = asyncHandler(async (req, res) => {
   const couponDiscountAmount = Number(couponValidation?.discountAmount || 0);
   const discountTotal = productDiscountTotal + couponDiscountAmount;
   const totalAmount = Math.max(0, subtotalAmount + shippingTotal - couponDiscountAmount);
-  const profitTotal = subtotalAmount - (productCostTotal + shippingTotal + productDiscountTotal + couponDiscountAmount);
+  const profitTotal = totalAmount - shippingTotal - productCostTotal;
 
   const { data: createdOrder, error: createOrderError } = await supabase
     .from("orders")

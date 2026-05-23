@@ -38,20 +38,19 @@ export function StoreProvider({ children }) {
     []
   );
 
-  useEffect(() => {
-    const loadProducts = async () => {
-      setLoadingProducts(true);
-      try {
-        const data = await getProductsApi();
-        setProducts(Array.isArray(data) ? data : []);
-      } catch {
-        setProducts([]);
-      } finally {
-        setLoadingProducts(false);
-      }
-    };
-
-    loadProducts();
+  const loadProducts = useCallback(async (params = {}) => {
+    setLoadingProducts(true);
+    try {
+      const data = await getProductsApi(params);
+      const nextProducts = Array.isArray(data) ? data : [];
+      setProducts(nextProducts);
+      return nextProducts;
+    } catch {
+      setProducts([]);
+      return [];
+    } finally {
+      setLoadingProducts(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -76,6 +75,16 @@ export function StoreProvider({ children }) {
 
     syncUserCollections();
   }, [cartFromApi, isAuthenticated, wishlistFromApi]);
+
+  useEffect(() => {
+    if (!isAuthenticated || products.length || loadingProducts) {
+      return;
+    }
+
+    if (cartItems.length || wishlist.length) {
+      loadProducts();
+    }
+  }, [cartItems.length, isAuthenticated, loadProducts, loadingProducts, products.length, wishlist.length]);
 
   const addToCart = async (productId, quantity = 1, variation = null) => {
     const key = String(productId);
@@ -228,6 +237,7 @@ export function StoreProvider({ children }) {
     cartDiscountTotal,
     products,
     loadingProducts,
+    loadProducts,
     syncing,
     getProductId,
     wishlist,

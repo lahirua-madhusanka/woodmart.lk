@@ -2,7 +2,7 @@ import asyncHandler from "express-async-handler";
 import crypto from "node:crypto";
 import supabase from "../config/supabase.js";
 import { mapProduct } from "../utils/dbMappers.js";
-import { getActivePromotionMapForProductIds } from "../services/promotionPricingService.js";
+import { buildResolvedPricing, getActivePromotionMapForProductIds } from "../services/promotionPricingService.js";
 import {
   uploadMultipleToImageKit,
   isImageKitConfigured,
@@ -227,6 +227,448 @@ const productSelectV1 =
 const productSelectV1LegacyVariations =
   "id, name, description, shipping_price, category, rating, brand, featured, status, created_at, updated_at, product_images(image_url, sort_order), product_variations(id, variation_name, price, sku, image_url, sort_order), product_reviews(id, user_id, name, title, rating, comment, order_id, created_at, updated_at)";
 
+const publicProductSelectV2 =
+  "id, name, description, category, rating, brand, featured, status, created_at, updated_at, product_images(image_url, sort_order), product_reviews(id, user_id, name, title, rating, comment, order_id, created_at, updated_at)";
+
+const productCardSelect = "id, name, category, rating, created_at, status";
+
+const normalizeCategoryValue = (value) => {
+  if (value && typeof value === "object") {
+    return String(value.name || value.title || value.id || "").trim();
+  }
+
+  return String(value || "").trim();
+};
+
+const slugify = (value = "") =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+const clampNumber = (value, { min = 0, max = Number.MAX_SAFE_INTEGER, fallback = 0 } = {}) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+};
+
+const toProductCardDTO = ({ product, primaryImage = "", variations = [], promotionEntry = null, reviewCount = 0 }) => {
+  const pricingOptions = variations.length
+    ? variations
+    : [{ price: product.price ?? 0, discounted_price: product.discount_price ?? null }];
+
+  const selectedPricing = pricingOptions.reduce((best, variation) => {
+    const pricing = buildResolvedPricing({
+      originalPrice: variation.price,
+      legacyDiscountPrice: variation.discounted_price,
+      promotionEntry,
+    });
+
+    if (!best || pricing.priceToPay < best.priceToPay) {
+      return pricing;
+    }
+
+    return best;
+  }, null);
+
+  const pricing = selectedPricing || buildResolvedPricing({ originalPrice: 0, legacyDiscountPrice: null, promotionEntry });
+
+  return {
+    id: product.id,
+    slug: slugify(product.name || product.id),
+    name: product.name,
+    category: normalizeCategoryValue(product.category) || "Uncategorized",
+    image: primaryImage,
+    rating: product.rating == null ? 0 : Number(product.rating),
+    reviewCount: Number(reviewCount || 0),
+    priceFrom: pricing.priceToPay,
+    originalPrice: pricing.originalPrice,
+    discountedPrice: pricing.discountedPrice,
+    discountPercentage: pricing.discountPercentage,
+    promotionActive: Boolean(pricing.promotionActive),
+  };
+};
+
+const resolveProductCardCategories = async (productRows = []) => {
+  const rows = Array.isArray(productRows) ? productRows : [];
+  if (!rows.length) return rows;
+
+  const categoryValues = [...new Set(rows.map((row) => normalizeCategoryValue(row.category)).filter(Boolean))];
+  if (!categoryValues.length) return rows;
+
+  try {
+    const { data, error } = await supabase
+      .from("categories")
+      .select("id, name");
+
+    if (error || !Array.isArray(data) || !data.length) {
+      return rows;
+    }
+
+    const categoryNameByValue = new Map();
+    for (const category of data) {
+      if (category.id) categoryNameByValue.set(String(category.id), category.name);
+      if (category.name) categoryNameByValue.set(String(category.name), category.name);
+    }
+
+    return rows.map((row) => {
+      const categoryValue = normalizeCategoryValue(row.category);
+      return {
+        ...row,
+        category: categoryNameByValue.get(categoryValue) || categoryValue,
+      };
+    });
+  } catch {
+    return rows;
+  }
+};
+
+const buildProductCardDTOs = async (productRows = []) => {
+  const products = await resolveProductCardCategories(productRows);
+  const ids = products.map((row) => row.id).filter(Boolean);
+
+  if (!ids.length) {
+    return [];
+  }
+
+  const [imageResult, variationResult, reviewResult, promotionMap] = await Promise.all([
+    supabase
+      .from("product_images")
+      .select("product_id, image_url, sort_order")
+      .in("product_id", ids)
+      .eq("sort_order", 0),
+    supabase
+      .from("product_variations")
+      .select("product_id, price, discounted_price")
+      .in("product_id", ids),
+    supabase
+      .from("product_reviews")
+      .select("product_id")
+      .in("product_id", ids),
+    getActivePromotionMapForProductIds(ids),
+  ]);
+
+  if (imageResult.error) {
+    throw new Error(imageResult.error.message);
+  }
+
+  let variations = Array.isArray(variationResult.data) ? variationResult.data : [];
+  if (variationResult.error && isMissingVariationSellingColumnError(variationResult.error.message)) {
+    const fallback = await supabase.from("product_variations").select("product_id, price").in("product_id", ids);
+    if (fallback.error) {
+      throw new Error(fallback.error.message);
+    }
+    variations = Array.isArray(fallback.data) ? fallback.data : [];
+  } else if (variationResult.error) {
+    throw new Error(variationResult.error.message);
+  }
+
+  if (reviewResult.error) {
+    throw new Error(reviewResult.error.message);
+  }
+
+  const imageByProduct = new Map(
+    (imageResult.data || []).map((row) => [row.product_id, row.image_url || ""])
+  );
+  const variationsByProduct = new Map();
+  const reviewCountByProduct = new Map();
+
+  for (const row of variations) {
+    if (!variationsByProduct.has(row.product_id)) {
+      variationsByProduct.set(row.product_id, []);
+    }
+    variationsByProduct.get(row.product_id).push(row);
+  }
+
+  for (const row of reviewResult.data || []) {
+    reviewCountByProduct.set(row.product_id, (reviewCountByProduct.get(row.product_id) || 0) + 1);
+  }
+
+  return products.map((product) =>
+    toProductCardDTO({
+      product,
+      primaryImage: imageByProduct.get(product.id) || "",
+      variations: variationsByProduct.get(product.id) || [],
+      promotionEntry: promotionMap.get(String(product.id)) || null,
+      reviewCount: reviewCountByProduct.get(product.id) || 0,
+    })
+  );
+};
+
+const fetchProductCardDTOs = async ({ orderBy = "created_at", ascending = false, limit = 8 } = {}) => {
+  const { data: productRows, error } = await supabase
+    .from("products")
+    .select(productCardSelect)
+    .eq("status", "active")
+    .order(orderBy, { ascending })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return buildProductCardDTOs(productRows || []);
+};
+
+const fetchBestSellerProductCardDTOs = async (limit = 8) => {
+  const { data: orderItems, error } = await supabase
+    .from("order_items")
+    .select("product_id, quantity");
+
+  if (error) {
+    return fetchProductCardDTOs({ orderBy: "created_at", ascending: false, limit });
+  }
+
+  const quantityByProduct = new Map();
+  for (const row of orderItems || []) {
+    const productId = row.product_id;
+    if (!productId) continue;
+    quantityByProduct.set(productId, (quantityByProduct.get(productId) || 0) + Number(row.quantity || 0));
+  }
+
+  const bestSellerIds = [...quantityByProduct.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([productId]) => productId);
+
+  if (!bestSellerIds.length) {
+    return fetchProductCardDTOs({ orderBy: "created_at", ascending: false, limit });
+  }
+
+  const { data: productRows, error: productsError } = await supabase
+    .from("products")
+    .select(productCardSelect)
+    .eq("status", "active")
+    .in("id", bestSellerIds);
+
+  if (productsError) {
+    throw new Error(productsError.message);
+  }
+
+  const productById = new Map((productRows || []).map((row) => [row.id, row]));
+  return buildProductCardDTOs(bestSellerIds.map((id) => productById.get(id)).filter(Boolean));
+};
+
+const fetchFeaturedCategoryDTOs = async (limit = 4) => {
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, category, status, created_at")
+    .eq("status", "active")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const products = await resolveProductCardCategories(data || []);
+  const categoryMap = new Map();
+
+  for (const product of products) {
+    const categoryName = normalizeCategoryValue(product.category) || "Uncategorized";
+    const existing = categoryMap.get(categoryName);
+
+    if (existing) {
+      existing.count += 1;
+      continue;
+    }
+
+    categoryMap.set(categoryName, {
+      id: slugify(categoryName) || categoryName,
+      name: categoryName,
+      image: "",
+      count: 1,
+      latestCreatedAt: product.created_at || null,
+      productId: product.id,
+    });
+  }
+
+  const categories = [...categoryMap.values()]
+    .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    .slice(0, limit);
+
+  const imageProductIds = categories.map((category) => category.productId).filter(Boolean);
+  if (imageProductIds.length) {
+    const { data: imageRows, error: imageError } = await supabase
+      .from("product_images")
+      .select("product_id, image_url, sort_order")
+      .in("product_id", imageProductIds)
+      .eq("sort_order", 0);
+
+    if (!imageError) {
+      const imageByProduct = new Map(
+        (imageRows || []).map((row) => [row.product_id, row.image_url || ""])
+      );
+
+      for (const category of categories) {
+        category.image = imageByProduct.get(category.productId) || "";
+      }
+    }
+  }
+
+  return categories.map(({ productId, latestCreatedAt, ...category }) => category);
+};
+
+const fetchMostLovedProductCardDTOs = async (limit = 8) => {
+  const { data, error } = await supabase
+    .from("product_reviews")
+    .select("product_id, created_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return fetchProductCardDTOs({ orderBy: "rating", ascending: false, limit });
+  }
+
+  const reviewedProductIds = [];
+  const seen = new Set();
+
+  for (const review of data || []) {
+    const productId = review.product_id;
+    if (!productId || seen.has(productId)) continue;
+
+    seen.add(productId);
+    reviewedProductIds.push(productId);
+
+    if (reviewedProductIds.length >= limit) break;
+  }
+
+  if (!reviewedProductIds.length) {
+    return fetchProductCardDTOs({ orderBy: "rating", ascending: false, limit });
+  }
+
+  const { data: productRows, error: productsError } = await supabase
+    .from("products")
+    .select(productCardSelect)
+    .eq("status", "active")
+    .in("id", reviewedProductIds);
+
+  if (productsError) {
+    throw new Error(productsError.message);
+  }
+
+  const productById = new Map((productRows || []).map((row) => [row.id, row]));
+  const reviewedProducts = reviewedProductIds.map((id) => productById.get(id)).filter(Boolean);
+
+  if (reviewedProducts.length >= limit) {
+    return buildProductCardDTOs(reviewedProducts.slice(0, limit));
+  }
+
+  const fallback = await fetchProductCardDTOs({ orderBy: "rating", ascending: false, limit });
+  const fallbackIds = new Set(reviewedProducts.map((product) => product.id));
+  const missing = fallback.filter((product) => !fallbackIds.has(product.id));
+  const reviewedCards = await buildProductCardDTOs(reviewedProducts);
+
+  return [...reviewedCards, ...missing].slice(0, limit);
+};
+
+const fetchLatestTestimonialDTOs = async (limit = 2) => {
+  const { data, error } = await supabase
+    .from("product_reviews")
+    .select("id, name, rating, comment, created_at, products(name)")
+    .not("comment", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || [])
+    .map((review) => {
+      const quote = String(review.comment || "").trim();
+      if (!quote) return null;
+
+      return {
+        id: review.id,
+        name: String(review.name || "Verified customer").trim() || "Verified customer",
+        quote,
+        rating: Number(review.rating || 0),
+        productName: review.products?.name || "",
+        createdAt: review.created_at || null,
+      };
+    })
+    .filter(Boolean);
+};
+
+const fetchShopProductCardPage = async ({
+  category,
+  q,
+  sort = "new",
+  minRating = 0,
+  maxPrice = 200000,
+  page = 1,
+  limit = 24,
+  offset = null,
+} = {}) => {
+  const pageNumber = clampNumber(page, { min: 1, fallback: 1 });
+  const pageSize = clampNumber(limit, { min: 1, max: 48, fallback: 24 });
+  const offsetNumber = offset == null || offset === ""
+    ? null
+    : clampNumber(offset, { min: 0, fallback: 0 });
+  const ratingFilter = clampNumber(minRating, { min: 0, max: 5, fallback: 0 });
+  const maxPriceFilter = clampNumber(maxPrice, { min: 0, max: 10000000, fallback: 200000 });
+  const queryText = String(q || "").trim();
+  const normalizedCategory = String(category || "").trim();
+
+  let query = supabase
+    .from("products")
+    .select(productCardSelect)
+    .eq("status", "active");
+
+  if (normalizedCategory) {
+    query = query.eq("category", normalizedCategory);
+  }
+
+  if (ratingFilter > 0) {
+    query = query.gte("rating", ratingFilter);
+  }
+
+  if (queryText) {
+    query = query.or(`name.ilike.%${queryText}%,category.ilike.%${queryText}%`);
+  }
+
+  if (sort === "rating") {
+    query = query.order("rating", { ascending: false }).order("name", { ascending: true });
+  } else if (sort === "new") {
+    query = query.order("created_at", { ascending: false });
+  } else {
+    query = query.order("name", { ascending: true });
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  const allCards = await buildProductCardDTOs(data || []);
+  let filteredCards = allCards.filter((card) => Number(card.priceFrom || 0) <= maxPriceFilter);
+
+  if (sort === "priceAsc") {
+    filteredCards = filteredCards.slice().sort((a, b) => Number(a.priceFrom || 0) - Number(b.priceFrom || 0));
+  } else if (sort === "priceDesc") {
+    filteredCards = filteredCards.slice().sort((a, b) => Number(b.priceFrom || 0) - Number(a.priceFrom || 0));
+  }
+
+  const total = filteredCards.length;
+  const start = offsetNumber == null ? (pageNumber - 1) * pageSize : offsetNumber;
+  const safePage = Math.floor(start / pageSize) + 1;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const items = filteredCards.slice(start, start + pageSize);
+
+  return {
+    items,
+    pagination: {
+      page: safePage,
+      limit: pageSize,
+      offset: start,
+      total,
+      totalPages,
+      hasMore: start + pageSize < total,
+    },
+  };
+};
+
 const loadProductRowById = async (id) => {
   const runSelect = async (selectClause) =>
     supabase.from("products").select(selectClause).eq("id", id).maybeSingle();
@@ -246,6 +688,20 @@ const loadProductRowById = async (id) => {
   }
 
   const { data, error } = result;
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return data;
+};
+
+const loadPublicProductRowById = async (id) => {
+  const { data, error } = await supabase
+    .from("products")
+    .select(publicProductSelectV2)
+    .eq("id", id)
+    .maybeSingle();
 
   if (error) {
     throw new Error(error.message);
@@ -485,7 +941,7 @@ export const getProducts = asyncHandler(async (req, res) => {
     }
   }
 
-  let products = rawRows.map(mapProduct);
+  let products = rawRows.map((row) => mapProduct(row, { includeCost: Boolean(req.includeProductCost) }));
   products = await enrichProductsWithPromotions(products);
 
   if (sort === "priceAsc") {
@@ -507,10 +963,72 @@ export const getProducts = asyncHandler(async (req, res) => {
   res.json(products);
 });
 
+export const getHomepageProducts = asyncHandler(async (req, res) => {
+  const [bestSellers, newArrivals, featuredCategories, testimonials] = await Promise.all([
+    fetchMostLovedProductCardDTOs(8),
+    fetchProductCardDTOs({ orderBy: "created_at", ascending: false, limit: 8 }),
+    fetchFeaturedCategoryDTOs(4),
+    fetchLatestTestimonialDTOs(2),
+  ]);
+
+  res.json({
+    bestSellers,
+    newArrivals,
+    featuredCategories,
+    testimonials,
+  });
+});
+
+export const getProductCategories = asyncHandler(async (req, res) => {
+  const { data, error } = await supabase
+    .from("products")
+    .select("id, category, status")
+    .eq("status", "active");
+
+  if (error) {
+    res.status(500);
+    throw new Error(error.message);
+  }
+
+  const products = await resolveProductCardCategories(data || []);
+  const categoryMap = new Map();
+
+  for (const product of products) {
+    const categoryName = normalizeCategoryValue(product.category);
+    if (!categoryName) continue;
+
+    categoryMap.set(categoryName, {
+      id: slugify(categoryName) || categoryName,
+      name: categoryName,
+      count: (categoryMap.get(categoryName)?.count || 0) + 1,
+    });
+  }
+
+  const categories = [...categoryMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+  res.json(categories);
+});
+
+export const getProductCards = asyncHandler(async (req, res) => {
+  const result = await fetchShopProductCardPage({
+    category: req.query.category,
+    q: req.query.q,
+    sort: req.query.sort,
+    minRating: req.query.minRating,
+    maxPrice: req.query.maxPrice,
+    page: req.query.page,
+    limit: req.query.limit,
+    offset: req.query.offset,
+  });
+
+  res.json(result);
+});
+
 export const getProductById = asyncHandler(async (req, res) => {
   let data;
   try {
-    data = await loadProductRowById(req.params.id);
+    data = req.includeProductCost
+      ? await loadProductRowById(req.params.id)
+      : await loadPublicProductRowById(req.params.id);
   } catch (err) {
     res.status(500);
     throw err;
@@ -527,14 +1045,18 @@ export const getProductById = asyncHandler(async (req, res) => {
       supabase.from("product_variations").select(cols).eq("product_id", data.id);
 
     let varRes = await tryFetch(
-      "id, product_id, name, price, discounted_price, cost, stock, sku, image_url, sort_order"
+      req.includeProductCost
+        ? "id, product_id, name, price, discounted_price, cost, stock, sku, image_url, sort_order"
+        : "id, product_id, name, price, discounted_price, stock, sku, image_url, sort_order"
     );
     if (varRes.error && isMissingVariationSellingColumnError(varRes.error.message)) {
       varRes = await tryFetch("id, product_id, name, price, sku, image_url, sort_order");
     }
     if (varRes.error && isMissingVariationNameColumnError(varRes.error.message)) {
       varRes = await tryFetch(
-        "id, product_id, variation_name, price, discounted_price, cost, stock, sku, image_url, sort_order"
+        req.includeProductCost
+          ? "id, product_id, variation_name, price, discounted_price, cost, stock, sku, image_url, sort_order"
+          : "id, product_id, variation_name, price, discounted_price, stock, sku, image_url, sort_order"
       );
     }
     if (!varRes.error) {
@@ -547,10 +1069,15 @@ export const getProductById = asyncHandler(async (req, res) => {
     }
   }
 
-  const product = mapProduct(data);
+  const product = mapProduct(data, { includeCost: Boolean(req.includeProductCost) });
   const [enriched] = await enrichProductsWithPromotions([product]);
   res.json(enriched);
 });
+
+export const allowProductCostInResponse = (req, res, next) => {
+  req.includeProductCost = true;
+  next();
+};
 
 export const createProduct = asyncHandler(async (req, res) => {
   // eslint-disable-next-line no-console

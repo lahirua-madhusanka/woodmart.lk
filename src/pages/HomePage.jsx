@@ -1,11 +1,11 @@
-import { lazy, Suspense, useEffect, useMemo } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import HeroSection from "../components/home/HeroSection";
 import StorefrontBannerSection from "../components/banners/StorefrontBannerSection";
 import LazySection from "../components/common/LazySection";
 import RoutePrefetchLink from "../components/common/RoutePrefetchLink";
 import SectionSkeleton from "../components/common/SectionSkeleton";
-import { useStore } from "../context/StoreContext";
+import { getHomepageProductsApi } from "../services/productService";
 import { warmLikelyStorefrontRoutes } from "../utils/performance/prefetchRoutes";
 
 // Keep only above-the-fold content eager and defer all heavy secondary sections.
@@ -17,10 +17,20 @@ const BrandLogosSection = lazy(() => import("../components/home/BrandLogosSectio
 const NewsletterSection = lazy(() => import("../components/home/NewsletterSection"));
 
 function HomePage() {
-  const { loadingProducts, products } = useStore();
+  const [homepageProducts, setHomepageProducts] = useState({
+    bestSellers: [],
+    newArrivals: [],
+    featuredCategories: [],
+    testimonials: [],
+  });
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const products = useMemo(
+    () => [...homepageProducts.bestSellers, ...homepageProducts.newArrivals],
+    [homepageProducts.bestSellers, homepageProducts.newArrivals]
+  );
   const hasProducts = products.length > 0;
 
-  const featuredCategories = useMemo(() => {
+  const fallbackFeaturedCategories = useMemo(() => {
     const categoryMap = new Map();
 
     for (const item of products || []) {
@@ -45,48 +55,51 @@ function HomePage() {
       .slice(0, 4);
   }, [products]);
 
+  const featuredCategories = homepageProducts.featuredCategories.length
+    ? homepageProducts.featuredCategories
+    : fallbackFeaturedCategories;
+
   useEffect(() => {
     // Prefetch likely next route during idle time to improve first interaction latency.
     warmLikelyStorefrontRoutes();
   }, []);
 
-  const sortedByRating = [...products].sort((a, b) => (b.rating || 0) - (a.rating || 0));
-  const sortedByNew = [...products].sort(
-    (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-  );
+  useEffect(() => {
+    let ignore = false;
 
-  const bestSelling = sortedByRating.slice(0, 8);
-  const newArrivals = sortedByNew.slice(0, 8);
-  const customerTestimonials = useMemo(() => {
-    const reviews = [];
-
-    for (const product of products || []) {
-      const productName = product?.name || "Product";
-      const entries = Array.isArray(product?.reviews) ? product.reviews : [];
-
-      for (const review of entries) {
-        const comment = String(review?.comment || "").trim();
-        if (!comment) continue;
-
-        reviews.push({
-          id: review?._id || `${productName}-${review?.createdAt || reviews.length}`,
-          name: String(review?.name || "Verified customer").trim() || "Verified customer",
-          quote: comment,
-          rating: Number(review?.rating || 0),
-          productName,
-          createdAt: review?.createdAt || null,
-        });
+    const loadHomepageProducts = async () => {
+      setLoadingProducts(true);
+      try {
+        const data = await getHomepageProductsApi();
+        if (!ignore) {
+          setHomepageProducts({
+            bestSellers: Array.isArray(data?.bestSellers) ? data.bestSellers : [],
+            newArrivals: Array.isArray(data?.newArrivals) ? data.newArrivals : [],
+            featuredCategories: Array.isArray(data?.featuredCategories) ? data.featuredCategories : [],
+            testimonials: Array.isArray(data?.testimonials) ? data.testimonials : [],
+          });
+        }
+      } catch {
+        if (!ignore) {
+          setHomepageProducts({ bestSellers: [], newArrivals: [], featuredCategories: [], testimonials: [] });
+        }
+      } finally {
+        if (!ignore) {
+          setLoadingProducts(false);
+        }
       }
-    }
+    };
 
-    return reviews
-      .sort(
-        (a, b) =>
-          new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime() ||
-          b.rating - a.rating
-      )
-      .slice(0, 2);
-  }, [products]);
+    loadHomepageProducts();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const bestSelling = homepageProducts.bestSellers;
+  const newArrivals = homepageProducts.newArrivals;
+  const customerTestimonials = homepageProducts.testimonials;
 
   return (
     <>

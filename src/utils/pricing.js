@@ -61,6 +61,24 @@ const getCandidateVariations = (product = {}) => {
 };
 
 export const getProductPricing = (product = {}) => {
+  if (product.priceFrom != null || product.discountedPrice != null) {
+    const originalPrice = roundMoney(product.originalPrice ?? product.priceFrom ?? 0);
+    const finalPrice = roundMoney(product.discountedPrice ?? product.priceFrom ?? originalPrice);
+    const hasDiscount = finalPrice < originalPrice;
+
+    return {
+      originalPrice,
+      discountedPrice: hasDiscount ? finalPrice : originalPrice,
+      finalPrice,
+      hasDiscount,
+      discountPercentage: hasDiscount
+        ? roundMoney(product.discountPercentage ?? ((originalPrice - finalPrice) / originalPrice) * 100)
+        : 0,
+      promotionActive: false,
+      promotion: null,
+    };
+  }
+
   const variations = getCandidateVariations(product);
 
   if (variations.length) {

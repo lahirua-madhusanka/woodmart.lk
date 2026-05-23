@@ -106,7 +106,7 @@ function ProductCard({ product }) {
             onFocus={prefetchCart}
             onClick={() => {
               prefetchCart();
-              if (product?.variations?.length) {
+              if (!Array.isArray(product?.variations) || product.variations.length) {
                 navigate(`/product/${productId}`);
                 return;
               }

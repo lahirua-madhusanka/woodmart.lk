@@ -12,7 +12,8 @@ export const mapUser = (row) => ({
   updatedAt: row.updated_at,
 });
 
-export const mapProduct = (row) => {
+export const mapProduct = (row, options = {}) => {
+  const includeCost = options.includeCost ?? true;
   const images = (row.product_images || [])
     .slice()
     .sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0))
@@ -27,7 +28,7 @@ export const mapProduct = (row) => {
       price: Number(entry.price || 0),
       discountedPrice:
         entry.discounted_price == null ? null : Number(entry.discounted_price),
-      cost: Number(entry.cost || 0),
+      ...(includeCost ? { cost: Number(entry.cost || 0) } : {}),
       stock: Number(entry.stock || 0),
       sku: entry.sku || "",
       imageUrl: entry.image_url || "",
@@ -56,7 +57,7 @@ export const mapProduct = (row) => {
     brand: row.brand || "",
     status: row.status || "active",
     featured: Boolean(row.featured),
-    shippingPrice: row.shipping_price == null ? 0 : Number(row.shipping_price),
+    ...(row.shipping_price == null ? {} : { shippingPrice: Number(row.shipping_price) }),
     rating: row.rating == null ? 0 : Number(row.rating),
     image: images[0] || "",
     images,
@@ -193,7 +194,8 @@ export const mapOrder = (row, options = {}) => {
   return mapped;
 };
 
-export const mapCart = (cartRow, itemRows, productRows) => {
+export const mapCart = (cartRow, itemRows, productRows, options = {}) => {
+  const includeCost = options.includeCost ?? false;
   const productMap = new Map(productRows.map((product) => [product.id, product]));
 
   return {
@@ -213,13 +215,13 @@ export const mapCart = (cartRow, itemRows, productRows) => {
               price: Number(variation.price || 0),
               discountedPrice:
                 variation.discounted_price == null ? null : Number(variation.discounted_price),
-              cost: Number(variation.cost || 0),
+              ...(includeCost ? { cost: Number(variation.cost || 0) } : {}),
               stock: Number(variation.stock || 0),
               sku: variation.sku || "",
               imageUrl: variation.image_url || "",
             }
           : null,
-        product: product ? mapProduct(product) : null,
+        product: product ? mapProduct(product, { includeCost }) : null,
         quantity: item.quantity,
       };
     }),
