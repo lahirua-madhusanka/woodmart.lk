@@ -9,6 +9,7 @@ import {
   getHomepageProducts,
   getProductCards,
   getProductById,
+  getRelatedProducts,
   getProductCategories,
   getReviewEligibility,
   getProducts,
@@ -43,6 +44,7 @@ router.get("/homepage", getHomepageProducts);
 router.get("/categories", getProductCategories);
 router.get("/cards", getProductCards);
 router.post("/upload-images", protect, adminOnly, upload.array("images", MAX_PRODUCT_IMAGES), uploadProductImages);
+router.get("/:id/related", getRelatedProducts);
 router.get("/:id", getProductById);
 
 router.post(

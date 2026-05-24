@@ -230,7 +230,7 @@ const productSelectV1LegacyVariations =
 const publicProductSelectV2 =
   "id, name, description, category, rating, brand, featured, status, created_at, updated_at, product_images(image_url, sort_order), product_reviews(id, user_id, name, title, rating, comment, order_id, created_at, updated_at)";
 
-const productCardSelect = "id, name, category, rating, created_at, status";
+const productCardSelect = "id, name, category, rating, featured, created_at, status";
 
 const normalizeCategoryValue = (value) => {
   if (value && typeof value === "object") {
@@ -279,6 +279,7 @@ const toProductCardDTO = ({ product, primaryImage = "", variations = [], promoti
     slug: slugify(product.name || product.id),
     name: product.name,
     category: normalizeCategoryValue(product.category) || "Uncategorized",
+    featured: Boolean(product.featured),
     image: primaryImage,
     rating: product.rating == null ? 0 : Number(product.rating),
     reviewCount: Number(reviewCount || 0),
@@ -289,6 +290,85 @@ const toProductCardDTO = ({ product, primaryImage = "", variations = [], promoti
     promotionActive: Boolean(pricing.promotionActive),
   };
 };
+
+export const getRelatedProducts = asyncHandler(async (req, res) => {
+  const productId = String(req.params.id || "");
+  const limit = clampNumber(req.query.limit == null ? 4 : req.query.limit, { min: 1, max: 24, fallback: 4 });
+
+  if (!productId) {
+    res.status(400);
+    throw new Error("Product id is required");
+  }
+
+  // Load current product to determine category
+  const { data: current, error: currentErr } = await supabase
+    .from("products")
+    .select("id, category")
+    .eq("id", productId)
+    .single();
+
+  if (currentErr || !current) {
+    res.status(404);
+    throw new Error("Product not found");
+  }
+
+  const category = normalizeCategoryValue(current.category);
+
+  let relatedRows = [];
+
+  if (category) {
+    const { data, error } = await supabase
+      .from("products")
+      .select(productCardSelect)
+      .eq("status", "active")
+      .eq("category", category)
+      .not("id", "eq", productId)
+      .limit(24);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    relatedRows = Array.isArray(data) ? data : [];
+  }
+
+  // If not enough related items, fill from other active products (by rating)
+  if ((relatedRows || []).length < limit) {
+    const exclude = new Set((relatedRows || []).map((r) => r.id).concat([productId]));
+    const needed = limit - (relatedRows || []).length;
+    const { data: fallback, error: fbErr } = await supabase
+      .from("products")
+      .select(productCardSelect)
+      .eq("status", "active")
+      .order("rating", { ascending: false })
+      .limit(needed + 8);
+
+    if (!fbErr && Array.isArray(fallback)) {
+      for (const row of fallback) {
+        if (!exclude.has(row.id)) {
+          relatedRows.push(row);
+          exclude.add(row.id);
+        }
+        if (relatedRows.length >= limit) break;
+      }
+    }
+  }
+
+  const dtos = await buildProductCardDTOs(relatedRows || []);
+
+  // Prefer promotionActive, featured, then rating
+  dtos.sort((a, b) => {
+    const pa = a.promotionActive ? 1 : 0;
+    const pb = b.promotionActive ? 1 : 0;
+    if (pb - pa) return pb - pa;
+    const fa = a.featured ? 1 : 0;
+    const fb = b.featured ? 1 : 0;
+    if (fb - fa) return fb - fa;
+    return (b.rating || 0) - (a.rating || 0);
+  });
+
+  res.json((dtos || []).slice(0, limit));
+});
 
 const resolveProductCardCategories = async (productRows = []) => {
   const rows = Array.isArray(productRows) ? productRows : [];

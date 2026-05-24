@@ -16,6 +16,7 @@ import {
   getProductByIdApi,
   getReviewEligibilityApi,
   updateProductReviewApi,
+  getRelatedProductsApi,
 } from "../services/productService";
 
 const DESCRIPTION_SANITIZE_OPTIONS = {
@@ -241,6 +242,49 @@ function ProductDetailsPage() {
     }
     return Number(product?.rating || 0).toFixed(1);
   }, [localReviews, product?.rating]);
+
+  // Scroll to top when product id changes (navigating from related products)
+  useEffect(() => {
+    window.setTimeout(() => {
+      try {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      } catch (e) {
+        window.scrollTo(0, 0);
+      }
+    }, 0);
+  }, [id]);
+
+  const [relatedProducts, setRelatedProducts] = useState([]);
+  const [loadingRelated, setLoadingRelated] = useState(false);
+
+  useEffect(() => {
+    let ignore = false;
+
+    const loadRelated = async () => {
+      if (!product) {
+        setRelatedProducts([]);
+        return;
+      }
+
+      setLoadingRelated(true);
+      try {
+        const data = await getRelatedProductsApi(getProductId(product), { limit: 4 });
+        if (!ignore) {
+          setRelatedProducts(Array.isArray(data) ? data : []);
+        }
+      } catch (err) {
+        if (!ignore) setRelatedProducts([]);
+      } finally {
+        if (!ignore) setLoadingRelated(false);
+      }
+    };
+
+    loadRelated();
+
+    return () => {
+      ignore = true;
+    };
+  }, [product, getProductId]);
 
   const reviewBuckets = useMemo(() => {
     const buckets = { 5: 0, 4: 0, 3: 0, 2: 0, 1: 0 };
@@ -782,12 +826,26 @@ function ProductDetailsPage() {
         )}
       </div>
 
-      {!!related.length && (
+      {loadingRelated ? (
         <div className="mt-12">
           <h2 className="mb-5 font-display text-3xl font-bold">Related products</h2>
-          <ProductGrid products={related} />
+          <div className="grid gap-3 sm:gap-6 grid-cols-2 md:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="overflow-hidden rounded-xl border border-slate-200 bg-white p-3">
+                <div className="animate-pulse">
+                  <div className="mb-3 h-44 w-full rounded-lg bg-slate-200" />
+                  <div className="h-4 w-3/4 rounded bg-slate-200" />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
+      ) : relatedProducts.length ? (
+        <div className="mt-12">
+          <h2 className="mb-5 font-display text-3xl font-bold">Related products</h2>
+          <ProductGrid products={relatedProducts} />
+        </div>
+      ) : null}
 
       {!!similar.length && (
         <div className="mt-12">

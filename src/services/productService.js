@@ -36,6 +36,13 @@ export const getProductByIdApi = async (id) => {
   return data;
 };
 
+export const getRelatedProductsApi = async (id, params = {}) => {
+  const { data } = await apiClient.get(`/products/${id}/related`, {
+    params,
+  });
+  return data;
+};
+
 export const addProductReviewApi = async (id, payload) => {
   const { data } = await apiClient.post(`/products/${id}/reviews`, payload);
   return data;
