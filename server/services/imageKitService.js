@@ -1,4 +1,4 @@
-import ImageKit from "imagekit";
+import ImageKit from "@imagekit/nodejs";
 import env from "../config/env.js";
 
 let imageKit = null;
@@ -37,9 +37,7 @@ const initializeImageKit = () => {
 
   try {
     imageKit = new ImageKit({
-      publicKey: env.imageKitPublicKey,
       privateKey: env.imageKitPrivateKey,
-      urlEndpoint: env.imageKitUrlEndpoint,
     });
 
     console.log("[ImageKit] Initialized successfully with endpoint:", env.imageKitUrlEndpoint);
@@ -94,7 +92,7 @@ export const uploadToImageKit = async ({
   try {
     console.log("[ImageKit Upload] Uploading to folder:", `/woodmart/${folder}`);
 
-    const response = await kit.upload({
+    const response = await kit.files.upload({
       file: buffer,
       fileName,
       folder: `/woodmart/${folder}`,
