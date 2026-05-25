@@ -8,6 +8,7 @@ import { usePrefetchOnHover, usePrefetchTrigger } from "../../hooks/usePrefetchO
 import { useStorefrontSettings } from "../../context/StorefrontSettingsContext";
 import { useStore } from "../../context/StoreContext";
 import { getProductPricing } from "../../utils/pricing";
+import { getOptimizedImageKitUrl } from "../../utils/imageKit";
 
 function ProductCard({ product }) {
   const { addToCart, getProductId, toggleWishlist, wishlist } = useStore();
@@ -26,7 +27,10 @@ function ProductCard({ product }) {
     return Number(product.reviewCount || 0);
   }, [product.reviewCount, product.reviews]);
 
-  const productImage = product.images?.[0] || product.image;
+  const productImage = getOptimizedImageKitUrl(product.images?.[0] || product.image, {
+    width: 520,
+    quality: 70,
+  });
   const detailsPrefetch = usePrefetchOnHover("productDetails", { immediate: true });
   const prefetchCart = usePrefetchTrigger("cart", { immediate: true });
   const prefetchWishlist = usePrefetchTrigger("wishlist", { immediate: true });

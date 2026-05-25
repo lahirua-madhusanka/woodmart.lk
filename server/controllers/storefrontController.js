@@ -3,7 +3,7 @@ import supabase from "../config/supabase.js";
 
 const settingsSelect = "*";
 
-const defaultStoreSettings = {
+export const defaultStoreSettings = {
   storeName: "Woodmart.lk",
   supportEmail: "",
   contactNumber: "",
@@ -86,7 +86,7 @@ const applyNoStoreHeaders = (res) => {
   res.set("Expires", "0");
 };
 
-const mapStoreSettings = (row = {}) => {
+export const mapStoreSettings = (row = {}) => {
   const legacySlide = {
     id: "hero-slide-1",
     imageUrl: row.hero_image_url ?? defaultStoreSettings.heroImage,
@@ -152,3 +152,20 @@ export const getStorefrontSettings = asyncHandler(async (req, res) => {
 
   return res.json(mapStoreSettings(data));
 });
+
+export const fetchStorefrontSettingsDTO = async () => {
+  const { data, error } = await supabase
+    .from("store_settings")
+    .select(settingsSelect)
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingRelationError(error.message)) {
+      return defaultStoreSettings;
+    }
+    throw new Error(error.message);
+  }
+
+  return data ? mapStoreSettings(data) : defaultStoreSettings;
+};

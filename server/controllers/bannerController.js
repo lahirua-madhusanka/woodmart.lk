@@ -8,7 +8,7 @@ import {
   migrateRemoteImageToImageKit,
 } from "../services/imageKitService.js";
 
-const allowedSections = [
+export const allowedSections = [
   "promo_strip",
   "category_promo",
   "featured_section",
@@ -35,7 +35,7 @@ const normalizeBannerImageUrl = async (imageUrl) => {
   });
 };
 
-const mapBanner = (row = {}) => ({
+export const mapBanner = (row = {}) => ({
   id: row.id,
   title: row.title || "",
   subtitle: row.subtitle || "",
@@ -296,3 +296,32 @@ export const getStorefrontBanners = asyncHandler(async (req, res) => {
 
   return res.json(rows.map(mapBanner));
 });
+
+export const fetchHomepageBannersDTO = async () => {
+  const { data, error } = await supabase
+    .from("banners")
+    .select("id, title, subtitle, image_url, button_text, button_link, section, display_order, status, start_date, end_date")
+    .eq("status", "active")
+    .in("section", allowedSections)
+    .order("display_order", { ascending: true })
+    .order("created_at", { ascending: false });
+
+  const empty = Object.fromEntries(allowedSections.map((section) => [section, []]));
+
+  if (error) {
+    if (isMissingRelationError(error.message)) {
+      return empty;
+    }
+    throw new Error(error.message);
+  }
+
+  const nowDateOnly = new Date().toISOString().slice(0, 10);
+  const rows = (data || []).filter((row) => isBannerWithinDateWindow(row, nowDateOnly));
+
+  return rows.reduce((acc, row) => {
+    const banner = mapBanner(row);
+    if (!acc[banner.section]) acc[banner.section] = [];
+    acc[banner.section].push(banner);
+    return acc;
+  }, empty);
+};

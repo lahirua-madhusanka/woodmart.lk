@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { toast } from "react-toastify";
 import apiClient from "../../services/apiClient";
 import { useUserAuth } from "../../context/UserAuthContext";
+import { getCachedHomepageData } from "../../services/homepageDataService";
 
 const STORAGE_KEY = "wm_welcome_popup_seen";
 // If auth check takes longer than this (ms), treat visitor as a guest and proceed.
@@ -17,7 +18,7 @@ function WelcomePopup() {
   // ?preview_popup=1 → bypass all checks, useful for production testing
   const isPreview = new URLSearchParams(location.search).get("preview_popup") === "1";
 
-  const [popup, setPopup] = useState(null);
+  const [popup, setPopup] = useState(() => getCachedHomepageData()?.welcomePopup || null);
   const [visible, setVisible] = useState(false);
   const [animateIn, setAnimateIn] = useState(false);
   // true once AUTH_TIMEOUT_MS elapses — treats visitor as guest even if auth is still loading
@@ -53,6 +54,31 @@ function WelcomePopup() {
   // Fetch popup config from backend
   useEffect(() => {
     let cancelled = false;
+    const isHomeRoute = location.pathname.replace(/\/+$/, "") === "";
+    const cachedPopup = getCachedHomepageData()?.welcomePopup;
+
+    if (cachedPopup) {
+      setPopup(cachedPopup);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const onHomepageDataLoaded = (event) => {
+      if (event.detail?.welcomePopup) {
+        setPopup(event.detail.welcomePopup);
+      }
+    };
+
+    window.addEventListener("homepage-data-loaded", onHomepageDataLoaded);
+
+    if (isHomeRoute) {
+      return () => {
+        cancelled = true;
+        window.removeEventListener("homepage-data-loaded", onHomepageDataLoaded);
+      };
+    }
+
     const fetchPopup = async () => {
       try {
         const { data } = await apiClient.get("/welcome-popup");
@@ -74,8 +100,11 @@ function WelcomePopup() {
       }
     };
     fetchPopup();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("homepage-data-loaded", onHomepageDataLoaded);
+    };
+  }, [location.pathname]);
 
   const openPopup = useCallback((preview = false) => {
     if (!preview && localStorage.getItem(STORAGE_KEY)) return;

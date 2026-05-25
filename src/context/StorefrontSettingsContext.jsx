@@ -3,6 +3,7 @@ import {
   defaultStorefrontSettings,
   getStorefrontSettingsApi,
 } from "../services/storefrontSettingsService";
+import { getCachedHomepageData } from "../services/homepageDataService";
 
 const StorefrontSettingsContext = createContext(null);
 const STOREFRONT_SETTINGS_CACHE_KEY = "storefront-settings-cache";
@@ -54,12 +55,26 @@ const shadeHex = (hex, factor) => {
 
 export function StorefrontSettingsProvider({ children }) {
   const [settings, setSettings] = useState(() => {
+    const homepageSettings = getCachedHomepageData()?.settings;
+    if (homepageSettings) {
+      return { ...defaultStorefrontSettings, ...homepageSettings };
+    }
+
     const cached = getCachedStorefrontSettings();
     return { ...defaultStorefrontSettings, ...(cached || {}) };
   });
 
   useEffect(() => {
     let ignore = false;
+    const isHomeRoute =
+      typeof window !== "undefined" &&
+      window.location.pathname.replace(/\/+$/, "") === "";
+
+    if (isHomeRoute) {
+      return () => {
+        ignore = true;
+      };
+    }
 
     const load = async () => {
       const payload = await getStorefrontSettingsApi();

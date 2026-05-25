@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import RoutePrefetchLink from "../common/RoutePrefetchLink";
 import { getStorefrontBannersBySectionApi } from "../../services/storefrontBannersService";
+import { getOptimizedImageKitUrl } from "../../utils/imageKit";
 
 const sectionLabelMap = {
   promo_strip: "",
@@ -36,9 +37,13 @@ function BannerAction({ banner }) {
   );
 }
 
-function StorefrontBannerSection({ section, columns = 2, containerClassName = "" }) {
-  const [banners, setBanners] = useState([]);
-  const [loading, setLoading] = useState(true);
+function StorefrontBannerSection({ section, columns = 2, containerClassName = "", initialBanners = null }) {
+  const normalizedInitialBanners = useMemo(
+    () => (Array.isArray(initialBanners) ? initialBanners : null),
+    [initialBanners]
+  );
+  const [banners, setBanners] = useState(() => normalizedInitialBanners || []);
+  const [loading, setLoading] = useState(() => !normalizedInitialBanners);
 
   const getLayoutClassName = (count) => {
     if (columns === 1) return "grid-cols-1";
@@ -49,6 +54,12 @@ function StorefrontBannerSection({ section, columns = 2, containerClassName = ""
   };
 
   useEffect(() => {
+    if (normalizedInitialBanners) {
+      setBanners(normalizedInitialBanners);
+      setLoading(false);
+      return undefined;
+    }
+
     let ignore = false;
 
     const load = async () => {
@@ -73,7 +84,7 @@ function StorefrontBannerSection({ section, columns = 2, containerClassName = ""
     return () => {
       ignore = true;
     };
-  }, [section]);
+  }, [normalizedInitialBanners, section]);
 
   if (loading) {
     return (
@@ -97,7 +108,7 @@ function StorefrontBannerSection({ section, columns = 2, containerClassName = ""
         {banners.map((banner) => (
           <article key={banner.id} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-900 p-6 text-white">
             <img
-              src={banner.imageUrl}
+              src={getOptimizedImageKitUrl(banner.imageUrl, { width: columns === 1 ? 1200 : 700, quality: 72 })}
               alt={banner.title}
               loading="lazy"
               decoding="async"
@@ -119,4 +130,4 @@ function StorefrontBannerSection({ section, columns = 2, containerClassName = ""
   );
 }
 
-export default StorefrontBannerSection;
+export default memo(StorefrontBannerSection);

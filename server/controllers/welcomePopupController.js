@@ -1,7 +1,7 @@
 import asyncHandler from "express-async-handler";
 import supabase from "../config/supabase.js";
 
-const defaultPopup = {
+export const defaultPopup = {
   isActive: false,
   title: "🎉 Welcome to Woodmart.lk",
   description:
@@ -12,7 +12,7 @@ const defaultPopup = {
   delaySeconds: 4,
 };
 
-const mapRow = (row = {}) => ({
+export const mapWelcomePopup = (row = {}) => ({
   isActive: Boolean(row.is_active),
   title: row.title ?? defaultPopup.title,
   description: row.description ?? defaultPopup.description,
@@ -49,7 +49,7 @@ export const getWelcomePopup = asyncHandler(async (req, res) => {
     return res.json(defaultPopup);
   }
 
-  return res.json(mapRow(data));
+  return res.json(mapWelcomePopup(data));
 });
 
 // GET /api/admin/welcome-popup  — admin only
@@ -68,7 +68,7 @@ export const getAdminWelcomePopup = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 
-  return res.json(data ? mapRow(data) : defaultPopup);
+  return res.json(data ? mapWelcomePopup(data) : defaultPopup);
 });
 
 // PUT /api/admin/welcome-popup  — admin only
@@ -106,5 +106,22 @@ export const updateAdminWelcomePopup = asyncHandler(async (req, res) => {
     throw new Error(error.message);
   }
 
-  return res.json(mapRow(data));
+  return res.json(mapWelcomePopup(data));
 });
+
+export const fetchWelcomePopupDTO = async () => {
+  const { data, error } = await supabase
+    .from("welcome_popup_settings")
+    .select("*")
+    .eq("id", true)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingTableError(error.message)) {
+      return defaultPopup;
+    }
+    throw new Error(error.message);
+  }
+
+  return data ? mapWelcomePopup(data) : defaultPopup;
+};

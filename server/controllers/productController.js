@@ -670,6 +670,35 @@ const fetchLatestTestimonialDTOs = async (limit = 2) => {
     .filter(Boolean);
 };
 
+const toHomepageProductCardDTO = (product = {}) => ({
+  id: product.id,
+  slug: product.slug,
+  name: product.name,
+  image: product.image || "",
+  category: product.category,
+  rating: Number(product.rating || 0),
+  priceFrom: Number(product.priceFrom || 0),
+  discountPercentage: Number(product.discountPercentage || 0),
+});
+
+export const fetchHomepageProductDataDTO = async () => {
+  const [bestSellers, newArrivals, featuredCategories, testimonials] = await Promise.all([
+    fetchMostLovedProductCardDTOs(8),
+    fetchProductCardDTOs({ orderBy: "created_at", ascending: false, limit: 8 }),
+    fetchFeaturedCategoryDTOs(4),
+    fetchLatestTestimonialDTOs(2),
+  ]);
+
+  return {
+    bestSellers: bestSellers.map(toHomepageProductCardDTO),
+    newArrivals: newArrivals.map(toHomepageProductCardDTO),
+    featuredProducts: bestSellers.slice(0, 8).map(toHomepageProductCardDTO),
+    topRatedProducts: bestSellers.slice(0, 8).map(toHomepageProductCardDTO),
+    featuredCategories,
+    testimonials,
+  };
+};
+
 const fetchShopProductCardPage = async ({
   category,
   q,
@@ -1044,19 +1073,8 @@ export const getProducts = asyncHandler(async (req, res) => {
 });
 
 export const getHomepageProducts = asyncHandler(async (req, res) => {
-  const [bestSellers, newArrivals, featuredCategories, testimonials] = await Promise.all([
-    fetchMostLovedProductCardDTOs(8),
-    fetchProductCardDTOs({ orderBy: "created_at", ascending: false, limit: 8 }),
-    fetchFeaturedCategoryDTOs(4),
-    fetchLatestTestimonialDTOs(2),
-  ]);
-
-  res.json({
-    bestSellers,
-    newArrivals,
-    featuredCategories,
-    testimonials,
-  });
+  const data = await fetchHomepageProductDataDTO();
+  res.json(data);
 });
 
 export const getProductCategories = asyncHandler(async (req, res) => {

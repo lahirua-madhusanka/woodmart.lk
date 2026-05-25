@@ -5,7 +5,7 @@ import StorefrontBannerSection from "../components/banners/StorefrontBannerSecti
 import LazySection from "../components/common/LazySection";
 import RoutePrefetchLink from "../components/common/RoutePrefetchLink";
 import SectionSkeleton from "../components/common/SectionSkeleton";
-import { getHomepageProductsApi } from "../services/productService";
+import { getHomepageDataApi, getCachedHomepageData, announceHomepageData } from "../services/homepageDataService";
 import { warmLikelyStorefrontRoutes } from "../utils/performance/prefetchRoutes";
 
 // Keep only above-the-fold content eager and defer all heavy secondary sections.
@@ -15,15 +15,18 @@ const BenefitsSection = lazy(() => import("../components/home/BenefitsSection"))
 const TestimonialsSection = lazy(() => import("../components/home/TestimonialsSection"));
 const BrandLogosSection = lazy(() => import("../components/home/BrandLogosSection"));
 const NewsletterSection = lazy(() => import("../components/home/NewsletterSection"));
+const EMPTY_BANNERS = [];
 
 function HomePage() {
-  const [homepageProducts, setHomepageProducts] = useState({
-    bestSellers: [],
-    newArrivals: [],
-    featuredCategories: [],
-    testimonials: [],
-  });
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const cachedHomepageData = useMemo(() => getCachedHomepageData(), []);
+  const [homepageProducts, setHomepageProducts] = useState(() => ({
+    bestSellers: Array.isArray(cachedHomepageData?.bestSellers) ? cachedHomepageData.bestSellers : [],
+    newArrivals: Array.isArray(cachedHomepageData?.newArrivals) ? cachedHomepageData.newArrivals : [],
+    featuredCategories: Array.isArray(cachedHomepageData?.featuredCategories) ? cachedHomepageData.featuredCategories : [],
+    testimonials: Array.isArray(cachedHomepageData?.testimonials) ? cachedHomepageData.testimonials : [],
+  }));
+  const [homepageBanners, setHomepageBanners] = useState(() => cachedHomepageData?.banners || {});
+  const [loadingProducts, setLoadingProducts] = useState(() => !cachedHomepageData);
   const products = useMemo(
     () => [...homepageProducts.bestSellers, ...homepageProducts.newArrivals],
     [homepageProducts.bestSellers, homepageProducts.newArrivals]
@@ -62,15 +65,18 @@ function HomePage() {
   useEffect(() => {
     // Prefetch likely next route during idle time to improve first interaction latency.
     warmLikelyStorefrontRoutes();
-  }, []);
+    if (cachedHomepageData) {
+      announceHomepageData(cachedHomepageData);
+    }
+  }, [cachedHomepageData]);
 
   useEffect(() => {
     let ignore = false;
 
-    const loadHomepageProducts = async () => {
-      setLoadingProducts(true);
+    const loadHomepageData = async () => {
+      setLoadingProducts(!cachedHomepageData);
       try {
-        const data = await getHomepageProductsApi();
+        const data = await getHomepageDataApi();
         if (!ignore) {
           setHomepageProducts({
             bestSellers: Array.isArray(data?.bestSellers) ? data.bestSellers : [],
@@ -78,10 +84,12 @@ function HomePage() {
             featuredCategories: Array.isArray(data?.featuredCategories) ? data.featuredCategories : [],
             testimonials: Array.isArray(data?.testimonials) ? data.testimonials : [],
           });
+          setHomepageBanners(data?.banners || {});
         }
       } catch {
-        if (!ignore) {
+        if (!ignore && !cachedHomepageData) {
           setHomepageProducts({ bestSellers: [], newArrivals: [], featuredCategories: [], testimonials: [] });
+          setHomepageBanners({});
         }
       } finally {
         if (!ignore) {
@@ -90,12 +98,12 @@ function HomePage() {
       }
     };
 
-    loadHomepageProducts();
+    loadHomepageData();
 
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [cachedHomepageData]);
 
   const bestSelling = homepageProducts.bestSellers;
   const newArrivals = homepageProducts.newArrivals;
@@ -158,7 +166,7 @@ function HomePage() {
         fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}
       >
         <Suspense fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}>
-          <StorefrontBannerSection section="promo_strip" columns={2} containerClassName="container-pad py-8" />
+          <StorefrontBannerSection section="promo_strip" columns={2} containerClassName="container-pad py-8" initialBanners={homepageBanners.promo_strip || EMPTY_BANNERS} />
         </Suspense>
       </LazySection>
 
@@ -167,7 +175,7 @@ function HomePage() {
         fallback={<SectionSkeleton minHeight={280} title="Loading category promotions..." />}
       >
         <Suspense fallback={<SectionSkeleton minHeight={280} title="Loading category promotions..." />}>
-          <StorefrontBannerSection section="category_promo" columns={2} containerClassName="container-pad py-8" />
+          <StorefrontBannerSection section="category_promo" columns={2} containerClassName="container-pad py-8" initialBanners={homepageBanners.category_promo || EMPTY_BANNERS} />
         </Suspense>
       </LazySection>
 
@@ -215,7 +223,7 @@ function HomePage() {
         fallback={<SectionSkeleton minHeight={260} title="Loading featured promotions..." />}
       >
         <Suspense fallback={<SectionSkeleton minHeight={260} title="Loading featured promotions..." />}>
-          <StorefrontBannerSection section="featured_section" columns={1} containerClassName="container-pad py-8" />
+          <StorefrontBannerSection section="featured_section" columns={1} containerClassName="container-pad py-8" initialBanners={homepageBanners.featured_section || EMPTY_BANNERS} />
         </Suspense>
       </LazySection>
 
@@ -242,7 +250,7 @@ function HomePage() {
         fallback={<SectionSkeleton minHeight={260} title="Loading additional banners..." />}
       >
         <Suspense fallback={<SectionSkeleton minHeight={260} title="Loading additional banners..." />}>
-          <StorefrontBannerSection section="secondary_banner" columns={2} containerClassName="container-pad py-8" />
+          <StorefrontBannerSection section="secondary_banner" columns={2} containerClassName="container-pad py-8" initialBanners={homepageBanners.secondary_banner || EMPTY_BANNERS} />
         </Suspense>
       </LazySection>
 
