@@ -1,4 +1,4 @@
-import ImageKit from "@imagekit/nodejs";
+import ImageKit, { toFile } from "@imagekit/nodejs";
 import env from "../config/env.js";
 
 let imageKit = null;
@@ -92,8 +92,10 @@ export const uploadToImageKit = async ({
   try {
     console.log("[ImageKit Upload] Uploading to folder:", `/woodmart/${folder}`);
 
+    const file = await toFile(buffer, fileName, { type: mimeType });
+
     const response = await kit.files.upload({
-      file: buffer,
+      file,
       fileName,
       folder: `/woodmart/${folder}`,
       isPrivateFile: false,
