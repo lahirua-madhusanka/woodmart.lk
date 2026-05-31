@@ -1,7 +1,7 @@
 import apiClient from "./apiClient";
 import { defaultStorefrontSettings } from "./storefrontSettingsService";
 
-const CACHE_KEY = "homepage-data-cache";
+const CACHE_KEY = "homepage-data-cache-v2";
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 const isFresh = (entry) =>

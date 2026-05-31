@@ -677,6 +677,7 @@ const toHomepageProductCardDTO = (product = {}) => ({
   image: product.image || "",
   category: product.category,
   rating: Number(product.rating || 0),
+  reviewCount: Number(product.reviewCount || 0),
   priceFrom: Number(product.priceFrom || 0),
   discountPercentage: Number(product.discountPercentage || 0),
 });
