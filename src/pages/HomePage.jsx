@@ -131,53 +131,6 @@ function HomePage() {
         </Suspense>
       </LazySection>
 
-      <LazySection
-        minHeight={520}
-        fallback={<SectionSkeleton minHeight={520} title="Loading best sellers..." />}
-      >
-        <Suspense fallback={<SectionSkeleton minHeight={520} title="Loading best sellers..." />}>
-          <section className="container-pad py-10">
-            <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-wider text-brand">
-                  Best Selling
-                </p>
-                <h2 className="font-display text-3xl font-bold">Most loved pieces</h2>
-              </div>
-              <RoutePrefetchLink
-                to="/shop"
-                routeKey="shop"
-                className="inline-flex items-center gap-1 text-sm font-semibold text-brand"
-              >
-                View all products <ArrowRight size={15} />
-              </RoutePrefetchLink>
-            </div>
-            {loadingProducts ? (
-              <div className="rounded-xl bg-white p-10 text-center text-muted">Loading products...</div>
-            ) : (
-              <ProductGrid products={bestSelling} emptyMessage="No products available yet." />
-            )}
-          </section>
-        </Suspense>
-      </LazySection>
-
-      <LazySection
-        minHeight={340}
-        fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}
-      >
-        <Suspense fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}>
-          <StorefrontBannerSection section="promo_strip" columns={2} containerClassName="container-pad py-8" initialBanners={homepageBanners.promo_strip || EMPTY_BANNERS} />
-        </Suspense>
-      </LazySection>
-
-      <LazySection
-        minHeight={280}
-        fallback={<SectionSkeleton minHeight={280} title="Loading category promotions..." />}
-      >
-        <Suspense fallback={<SectionSkeleton minHeight={280} title="Loading category promotions..." />}>
-          <StorefrontBannerSection section="category_promo" columns={2} containerClassName="container-pad py-8" initialBanners={homepageBanners.category_promo || EMPTY_BANNERS} />
-        </Suspense>
-      </LazySection>
 
       <LazySection
         minHeight={520}
@@ -204,6 +157,54 @@ function HomePage() {
               <div className="rounded-xl bg-white p-10 text-center text-muted">Loading products...</div>
             ) : (
               <ProductGrid products={newArrivals} emptyMessage="No products available yet." />
+            )}
+          </section>
+        </Suspense>
+      </LazySection>
+
+      <LazySection
+        minHeight={340}
+        fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}
+      >
+        <Suspense fallback={<SectionSkeleton minHeight={340} title="Loading offers..." />}>
+          <StorefrontBannerSection section="promo_strip" columns={2} containerClassName="container-pad py-8" initialBanners={homepageBanners.promo_strip || EMPTY_BANNERS} />
+        </Suspense>
+      </LazySection>
+
+      <LazySection
+        minHeight={280}
+        fallback={<SectionSkeleton minHeight={280} title="Loading category promotions..." />}
+      >
+        <Suspense fallback={<SectionSkeleton minHeight={280} title="Loading category promotions..." />}>
+          <StorefrontBannerSection section="category_promo" columns={2} containerClassName="container-pad py-8" initialBanners={homepageBanners.category_promo || EMPTY_BANNERS} />
+        </Suspense>
+      </LazySection>
+
+      <LazySection
+        minHeight={520}
+        fallback={<SectionSkeleton minHeight={520} title="Loading best sellers..." />}
+      >
+        <Suspense fallback={<SectionSkeleton minHeight={520} title="Loading best sellers..." />}>
+          <section className="container-pad py-10">
+            <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wider text-brand">
+                  Best Selling
+                </p>
+                <h2 className="font-display text-3xl font-bold">Most loved pieces</h2>
+              </div>
+              <RoutePrefetchLink
+                to="/shop"
+                routeKey="shop"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-brand"
+              >
+                View all products <ArrowRight size={15} />
+              </RoutePrefetchLink>
+            </div>
+            {loadingProducts ? (
+              <div className="rounded-xl bg-white p-10 text-center text-muted">Loading products...</div>
+            ) : (
+              <ProductGrid products={bestSelling} emptyMessage="No products available yet." />
             )}
           </section>
         </Suspense>

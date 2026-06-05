@@ -36,6 +36,7 @@ const ShippingPolicyPage = lazy(() => import("./pages/ShippingPolicyPage"));
 const ReturnsRefundsPage = lazy(() => import("./pages/ReturnsRefundsPage"));
 const OrderTrackingPage = lazy(() => import("./pages/OrderTrackingPage"));
 const FAQPage = lazy(() => import("./pages/FAQPage"));
+const BoardCareGuidePage = lazy(() => import("./pages/BoardCareGuidePage"));
 
 // Admin area is split into isolated chunks and loaded only for admin routes.
 const AdminLayout = lazy(() => import("./admin/layout/AdminLayout"));
@@ -210,6 +211,7 @@ function App() {
         <Route path="returns-refunds" element={withSuspense(<ReturnsRefundsPage />, "Loading returns & refunds...")} />
         <Route path="order-tracking" element={withSuspense(<OrderTrackingPage />, "Loading order tracking...")} />
         <Route path="faq" element={withSuspense(<FAQPage />, "Loading FAQ...")} />
+        <Route path="board-care-guide" element={withSuspense(<BoardCareGuidePage />, "Loading board care guide...")} />
         <Route path="custom-project" element={withSuspense(<CustomProjectPage />, "Loading custom project...")} />
         <Route
           path="my-requests"
