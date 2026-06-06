@@ -45,8 +45,8 @@ export const mockCoupons = [
 export const mockSettings = {
   storeName: "Woodmart.lk",
   supportEmail: "support@woodmart.lk",
-  contactNumber: "076 0659957",
-  storeAddress: "Baddegama,Galle",
+  contactNumber: "076 065 9957",
+  storeAddress: "Baddegama, Galle",
   currency: "Rs.",
   freeShippingThreshold: 199,
   themeAccent: "#0959a4",

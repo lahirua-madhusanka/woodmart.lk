@@ -55,10 +55,10 @@ function Footer() {
           <h4 className="font-semibold text-ink">Get in Touch</h4>
           <ul className="mt-4 space-y-3 text-sm text-muted">
             <li className="inline-flex items-start gap-2">
-              <MapPin size={16} className="mt-0.5" /> {settings.storeAddress || "Baddegama,Galle"}
+              <MapPin size={16} className="mt-0.5" /> {settings.storeAddress || "Baddegama, Galle"}
             </li>
             <li className="inline-flex items-center gap-2">
-              <Phone size={16} /> {settings.contactNumber || "076 0659957"}
+              <Phone size={16} /> {settings.contactNumber || "076 065 9957"}
             </li>
             <li className="inline-flex items-center gap-2">
               <Mail size={16} /> {settings.supportEmail || "support@woodmart.lk"}

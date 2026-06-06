@@ -49,7 +49,7 @@ const guideSections = [
     title: "Oiling & Maintenance",
     icon: RefreshCw,
     image:
-      "https://ik.imagekit.io/awh2hzli9/woodmart/how%20to%20care/how%20to%20care%20woodmart%20(5).png",
+      "https://ik.imagekit.io/awh2hzli9/woodmart/how%20to%20care/how%20to%20care%20woodmart%20(1).jpg",
     body:
       "Oil your board every few weeks, or whenever the surface looks dry. Apply a small amount of food-grade mineral oil, spread it evenly, let it absorb, then wipe away any excess.",
     tips: [
@@ -75,7 +75,7 @@ const guideSections = [
     title: "Restoration Service",
     icon: ShieldCheck,
     image:
-      "https://ik.imagekit.io/awh2hzli9/woodmart/how%20to%20care/how%20to%20care%20woodmart%20(1).jpg",
+      "https://ik.imagekit.io/awh2hzli9/woodmart/how%20to%20care/how%20to%20care%20woodmart%20(6).png?updatedAt=1780643262574",
     body:
       "If your board becomes deeply scratched, dry, or uneven after long-term use, contact Woodmart.lk for restoration guidance. We can advise on sanding, oiling, and refreshing the surface safely.",
     tips: [

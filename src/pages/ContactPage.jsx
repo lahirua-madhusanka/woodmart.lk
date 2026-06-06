@@ -62,8 +62,8 @@ function ContactPage() {
   const storeInfo = useMemo(
     () => ({
       storeName: settings.storeName || "Woodmart.lk",
-      address: settings.storeAddress || "Baddegama,Galle",
-      phone: settings.contactNumber || "076 0659957",
+      address: settings.storeAddress || "Baddegama, Galle",
+      phone: settings.contactNumber || "076 065 9957",
       email: settings.supportEmail || "support@woodmart.lk",
       businessHours: settings.businessHours || "Mon - Sat, 9:00 AM - 7:00 PM",
       supportNote:
