@@ -62,8 +62,8 @@ function ContactPage() {
   const storeInfo = useMemo(
     () => ({
       storeName: settings.storeName || "Woodmart.lk",
-      address: settings.storeAddress || "224 Artisan Street, New York",
-      phone: settings.contactNumber || "+1 (212) 555-0193",
+      address: settings.storeAddress || "Baddegama,Galle",
+      phone: settings.contactNumber || "076 0659957",
       email: settings.supportEmail || "support@woodmart.lk",
       businessHours: settings.businessHours || "Mon - Sat, 9:00 AM - 7:00 PM",
       supportNote:
