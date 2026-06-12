@@ -847,14 +847,6 @@ function ProductDetailsPage() {
         </div>
       ) : null}
 
-      {!!similar.length && (
-        <div className="mt-12">
-          <h2 className="mb-5 inline-flex items-center gap-2 font-display text-3xl font-bold">
-            <ShoppingBag size={22} /> Similar products
-          </h2>
-          <ProductGrid products={similar} />
-        </div>
-      )}
     </section>
   );
 }
