@@ -46,7 +46,9 @@ function Footer() {
             <li><NavLink to="/shipping-policy" className="hover:text-brand">Shipping Policy</NavLink></li>
             <li><NavLink to="/returns-refunds" className="hover:text-brand">Returns & Refunds</NavLink></li>
             <li><NavLink to="/order-tracking" className="hover:text-brand">Order Tracking</NavLink></li>
-            <li><NavLink to="/board-care-guide" className="hover:text-brand">Cutting Board Care Guide</NavLink></li>
+            <li><NavLink to="/board-care-guide" className="hover:text-brand">Board Care Guide</NavLink></li>
+            <li><NavLink to="/privacy-policy" className="hover:text-brand">Privacy Policy</NavLink></li>
+            <li><NavLink to="/terms-and-conditions" className="hover:text-brand">Business Terms & Conditions</NavLink></li>
             <li><NavLink to="/faq" className="hover:text-brand">FAQ</NavLink></li>
           </ul>
         </div>

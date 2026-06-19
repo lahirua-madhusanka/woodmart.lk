@@ -142,7 +142,7 @@ function ShippingPolicyPage() {
         <div className="rounded-lg border-2 border-brand bg-brand-light p-8">
           <h3 className="font-display text-xl font-bold text-brand-dark mb-2">Free Shipping Available</h3>
           <p className="text-sm text-slate-700">
-            Orders above ₨5,000 qualify for free island-wide shipping (excludes certain remote areas). Free shipping will be applied at checkout.
+            Orders above Rs.100,000 qualify for free island-wide shipping (excludes certain remote areas). Free shipping will be applied at checkout.
           </p>
         </div>
 

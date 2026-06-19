@@ -35,6 +35,8 @@ const ReturnsRefundsPage = lazy(() => import("../pages/ReturnsRefundsPage"));
 const OrderTrackingPage = lazy(() => import("../pages/OrderTrackingPage"));
 const FAQPage = lazy(() => import("../pages/FAQPage"));
 const BoardCareGuidePage = lazy(() => import("../pages/BoardCareGuidePage"));
+const PrivacyPolicyPage = lazy(() => import("../pages/PrivacyPolicyPage"));
+const TermsAndConditionsPage = lazy(() => import("../pages/TermsAndConditionsPage"));
 
 const withSuspense = (node, label) => (
   <Suspense fallback={<PageFallbackLoader label={label} />}>{node}</Suspense>
@@ -138,6 +140,8 @@ function UserApp() {
         <Route path="order-tracking" element={withSuspense(<OrderTrackingPage />, "Loading order tracking...")} />
         <Route path="faq" element={withSuspense(<FAQPage />, "Loading FAQ...")} />
         <Route path="board-care-guide" element={withSuspense(<BoardCareGuidePage />, "Loading board care guide...")} />
+        <Route path="privacy-policy" element={withSuspense(<PrivacyPolicyPage />, "Loading privacy policy...")} />
+        <Route path="terms-and-conditions" element={withSuspense(<TermsAndConditionsPage />, "Loading terms...")} />
         <Route path="custom-project" element={withSuspense(<CustomProjectPage />, "Loading custom project...")} />
         <Route
           path="my-requests"
